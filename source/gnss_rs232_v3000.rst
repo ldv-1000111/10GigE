@@ -1,0 +1,141 @@
+RS232 Connection on the Bedrock V3000
+======================================
+
+The Bedrock V3000 does not expose a native DE-9 RS232 port on its front panel.
+The recommended approach for connecting a GNSS receiver is a **USB-to-RS232
+adapter**, which appears as a standard TTY device on Linux with full Qt
+``QSerialPort`` support.
+
+Hardware Connection
+--------------------
+
+.. code-block:: text
+
+   GNSS Receiver
+   ├── TX ──────────────────► RX
+   ├── RX ◄────────────────── TX    USB-to-RS232     Bedrock V3000
+   └── GND ─────────────────► GND   adapter          USB 3.2 port
+                                    (CP2102/FTDI)  ──► /dev/ttyUSB0
+
+Recommended adapters for industrial use:
+
+- **FTDI FT232RL** — most reliable Linux driver, best latency
+- **Silicon Labs CP2102** — excellent Linux support, common in industrial grade
+- Avoid PL2303 clones — unreliable driver behaviour under sustained load
+
+Wiring the RS232 Side
+----------------------
+
+Most GNSS receivers output NMEA on a standard DE-9 connector or bare pins:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 20 60
+
+   * - GNSS pin
+     - Adapter pin
+     - Notes
+   * - TX (data out)
+     - RX (DE-9 pin 2)
+     - GNSS sends → adapter receives
+   * - RX (data in)
+     - TX (DE-9 pin 3)
+     - Only needed if sending commands to receiver
+   * - GND
+     - GND (DE-9 pin 5)
+     - Common ground — always connect
+   * - VCC (3.3V or 5V)
+     - —
+     - Power from receiver's own supply; do not power from adapter
+
+.. warning::
+   RS232 signal levels are ±12V. Do NOT connect RS232 TX/RX directly to
+   a UART/TTL header (3.3V) without a level shifter. Dedicated USB-to-RS232
+   adapters handle this conversion internally.
+
+Linux Device Node
+------------------
+
+After plugging in the USB-to-RS232 adapter, verify the device appears:
+
+.. code-block:: bash
+
+   # List USB serial devices
+   ls /dev/ttyUSB*
+   # Expected: /dev/ttyUSB0
+
+   # Check kernel log for device recognition
+   dmesg | tail -20 | grep -E "tty|USB|serial"
+
+   # Verify NMEA output at the command line (replace 9600 with your baud rate)
+   stty -F /dev/ttyUSB0 9600 raw
+   cat /dev/ttyUSB0
+
+You should see a stream of ``$GNGGA``, ``$GNRMC`` sentences scrolling in the
+terminal. If not, check your wiring and baud rate.
+
+User Permissions
+-----------------
+
+On Ubuntu/Debian, add your user to the ``dialout`` group to access serial ports
+without root:
+
+.. code-block:: bash
+
+   sudo usermod -aG dialout $USER
+   # Log out and back in for this to take effect
+
+   # Verify
+   groups $USER | grep dialout
+
+Common GNSS Receiver Baud Rates
+---------------------------------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 25 35
+
+   * - Receiver type
+     - Default baud
+     - Update rate
+   * - Standard GPS (SiRF, MTK)
+     - 4800 or 9600
+     - 1 Hz
+   * - u-blox M8 series
+     - 9600
+     - 1–10 Hz (configurable)
+   * - u-blox F9P (RTK)
+     - 115200 (default)
+     - 1–20 Hz
+   * - Trimble, Novatel (survey)
+     - 9600–115200
+     - 1–100 Hz
+
+.. tip::
+   For aerial imaging applications, use a receiver with at least **5 Hz**
+   update rate. At 5 Hz a platform moving at 30 m/s has a maximum position
+   uncertainty of 6 m between updates. At 1 Hz that grows to 30 m — potentially
+   unacceptable for precision applications.
+
+Qt Serial Port — Required Package
+-----------------------------------
+
+Install the Qt SerialPort module (if not already included):
+
+.. code-block:: bash
+
+   sudo apt install qt6-serialport-dev
+
+Add to ``CMakeLists.txt``:
+
+.. code-block:: cmake
+
+   find_package(Qt6 REQUIRED COMPONENTS Core Widgets Gui SerialPort)
+
+   target_link_libraries(SHR_Camera_App
+       PRIVATE
+           Qt6::Core Qt6::Widgets Qt6::Gui Qt6::SerialPort
+           ${VMB_CPP_LIB} ${VMB_IMG_LIB} pthread)
+
+Qt SerialPort documentation:
+https://doc.qt.io/qt-6/qserialport.html

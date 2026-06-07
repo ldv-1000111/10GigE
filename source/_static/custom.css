@@ -1,0 +1,72 @@
+/* SHR 10GigE Tutorial — Custom styles */
+
+:root {
+    --color-accent: #e8a020;
+    --color-accent-dark: #c47a10;
+}
+
+/* Sidebar branding accent */
+.wy-nav-side {
+    background: #1a1a2e;
+}
+
+.wy-side-nav-search {
+    background: #16213e;
+}
+
+.wy-side-nav-search a {
+    color: #e8a020 !important;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+/* Active nav item */
+.wy-menu-vertical li.current > a {
+    background: #e8a020;
+    color: #1a1a2e !important;
+    font-weight: 600;
+}
+
+.wy-menu-vertical li.current > a:hover {
+    background: #c47a10;
+}
+
+/* Code blocks */
+.highlight {
+    border-left: 3px solid #e8a020;
+    border-radius: 0 4px 4px 0;
+}
+
+/* Admonition notes */
+.rst-content .note .admonition-title {
+    background: #e8a020;
+}
+
+.rst-content .warning .admonition-title {
+    background: #c0392b;
+}
+
+.rst-content .tip .admonition-title {
+    background: #27ae60;
+}
+
+/* Step headings */
+h2 {
+    border-bottom: 2px solid #e8a020;
+    padding-bottom: 6px;
+}
+
+/* Terminal/bash distinction */
+.highlight-bash pre {
+    background: #0d0d0d;
+    border-left: 3px solid #27ae60;
+}
+
+/* Inline code */
+code.literal {
+    color: #e8a020;
+    background: #f5f0e8;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 0.9em;
+}

@@ -1,0 +1,129 @@
+Qt's Role in the Acquisition Architecture
+==========================================
+
+In an SHR 10GigE capture system, Qt is not the data pipeline — it is the
+**control and monitoring layer** that sits above it. Understanding this
+distinction is essential for designing an application that stays responsive
+while Vimba X saturates the 10 GbE link.
+
+Architecture Overview
+----------------------
+
+The application consists of three independent layers, each running on
+separate threads:
+
+.. code-block:: text
+
+   ┌─────────────────────────────────────────────────────┐
+   │                  Qt Application Layer                │
+   │  ┌─────────────────┐   ┌──────────────────────────┐ │
+   │  │  Main UI Thread  │   │   Qt Signals / Slots     │ │
+   │  │  - Trigger btn   │   │   - frameReceived(index) │ │
+   │  │  - Status panel  │◄──│   - statsUpdated()       │ │
+   │  │  - Preview thumb │   │   - errorOccurred()      │ │
+   │  └────────┬─────────┘   └──────────────────────────┘ │
+   └───────────┼─────────────────────────────────────────┘
+               │ QMetaObject::invokeMethod (thread-safe)
+   ┌───────────▼─────────────────────────────────────────┐
+   │             Vimba X Acquisition Layer                │
+   │  ┌──────────────────────────────────────────────┐   │
+   │  │  FrameObserver (Vimba X callback thread)     │   │
+   │  │  - Validates frame status                    │   │
+   │  │  - Copies frame metadata                     │   │
+   │  │  - Signals worker thread                     │   │
+   │  │  - QueueFrame() immediately                  │   │
+   │  └──────────────────────────────────────────────┘   │
+   └─────────────────────────────────────────────────────┘
+               │ std::condition_variable notify
+   ┌───────────▼─────────────────────────────────────────┐
+   │               Frame Processing Layer                 │
+   │  ┌──────────────────────────────────────────────┐   │
+   │  │  Worker Thread                               │   │
+   │  │  - Debayer (VmbImageTransform)               │   │
+   │  │  - Write to NVMe                             │   │
+   │  │  - Generate thumbnail for Qt preview         │   │
+   │  └──────────────────────────────────────────────┘   │
+   └─────────────────────────────────────────────────────┘
+
+What Qt Controls
+-----------------
+
+**Trigger commands**
+
+   For software triggering, Qt issues a single Vimba X feature write —
+   a lightweight operation that completes in microseconds:
+
+   .. code-block:: cpp
+
+      // In a Qt slot connected to a button:
+      void MainWindow::onTriggerClicked()
+      {
+          FeaturePtr feature;
+          m_camera->GetFeatureByName("TriggerSoftware", feature);
+          feature->RunCommand();    // non-blocking, microseconds
+      }
+
+   For hardware triggering (TTL line), Qt simply enables or disables
+   the trigger mode — the actual timing is handled by the external signal.
+
+**Acquisition start/stop**
+
+   Qt buttons map to ``AcquisitionStart`` / ``AcquisitionStop`` feature
+   commands. These are called once per session, not per frame.
+
+**Parameter control**
+
+   Exposure time, gain, pixel format, and ROI are set via Qt spinboxes
+   and combo boxes, each writing a single Vimba X feature. These are
+   infrequent operations with no throughput impact.
+
+**Status monitoring**
+
+   Frame count, frame rate, buffer queue depth, and error counts are
+   updated via Qt signals from the acquisition layer. The UI polls or
+   receives these at 1–10 Hz — imperceptible overhead.
+
+**Preview display**
+
+   If a live preview is shown in the Qt window, it must be a **downsampled
+   thumbnail**, not the full frame. Displaying a 151 MP image in a Qt widget
+   would require gigabytes of GPU texture upload per frame. A 1920×1080
+   downsampled thumbnail generated in the worker thread and uploaded as a
+   ``QImage`` is the correct approach.
+
+What Qt Does NOT Do
+--------------------
+
+The following must never happen on the Qt main thread or inside a Vimba X
+callback:
+
+- Debayering full-resolution frames
+- Writing frames to NVMe
+- Copying large frame buffers
+- Any blocking operation > ~5 ms
+
+If any of these run on the Vimba X callback thread, ``QueueFrame()`` is
+delayed and the next incoming frame may find no free buffer — causing drops.
+If they run on the Qt main thread, the UI freezes and trigger buttons become
+unresponsive.
+
+Thread Pinning on the V3000
+-----------------------------
+
+The Bedrock V3000's 8-core Zen3+ CPU provides enough cores to assign
+exclusive cores to each layer:
+
+.. code-block:: text
+
+   Core 0–1:  Vimba X acquisition thread (real-time, SCHED_FIFO)
+   Core 2–3:  Frame worker thread (high priority)
+   Core 4–5:  NVMe write thread
+   Core 6–7:  Qt main thread + OS
+
+This is configured via the real-time scheduling settings in
+:doc:`system_settings` and optionally via ``pthread_setaffinity_np()``
+in the application startup code.
+
+With this layout, the 10 GbE receive path (cores 0–1) is never preempted
+by Qt rendering or disk I/O, and the UI (cores 6–7) remains responsive
+at all times regardless of frame rate or image size.

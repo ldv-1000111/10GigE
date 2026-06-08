@@ -13,14 +13,18 @@ Full Qt 6 documentation is at https://doc.qt.io/qt-6/
 
 .. code-block:: bash
 
-   # Ubuntu 22.04 / 24.04
+   # Ubuntu 24.04 LTS
    sudo apt install qt6-base-dev qt6-base-dev-tools cmake ninja-build
 
-   # Verify
+   # Verify — should report 6.8.x or higher
    qmake6 --version
 
-Qt 6.x is recommended. Qt 5.15 also works — replace ``qt6`` with ``qt5``
-in the package names and ``Qt6`` with ``Qt5`` in CMakeLists.txt.
+**Qt 6.8 LTS** is the recommended version for this project — it is the
+current long-term support release, supported until October 2029, and
+the correct choice for industrial applications requiring multi-year stability.
+
+Install via the `Qt online installer <https://www.qt.io/download-qt-installer>`_
+(select Qt 6.8 LTS) or via the system package manager if 6.8 is available:
 
 Directory Structure
 --------------------
@@ -49,7 +53,7 @@ CMakeLists.txt
    set(CMAKE_AUTORCC ON)
 
    # Qt 6
-   find_package(Qt6 REQUIRED COMPONENTS Core Widgets Gui)
+   find_package(Qt6 6.8 REQUIRED COMPONENTS Core Widgets Gui)
 
    # Vimba X — adjust path as needed
    if(NOT DEFINED VIMBAX_DIR)

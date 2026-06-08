@@ -14,7 +14,7 @@ Introduction
    | **Author:** Luis Viveros
    | **Date:** June 2026
    | **SDK Version:** Vimba X 2026-1
-   | **Platform:** SolidRun Bedrock V3000 — Linux (Ubuntu 22.04+)
+   | **Platform:** SolidRun Bedrock V3000 — Linux (Ubuntu 24.04 LTS)
 
 ----
 
@@ -215,11 +215,11 @@ To follow this guide you will need:
      - Vimba X 2026-1
        (`download <https://www.alliedvision.com/en/support/software-downloads/vimba-x-sdk/vimba-x>`_)
    * - **OS**
-     - Ubuntu 22.04 LTS or equivalent Linux x86_64
+     - Ubuntu 24.04 LTS (x86_64)
    * - **Compiler**
      - GCC 11+ or Clang 13+ (C++17 required)
    * - **Build tools**
-     - CMake 3.16+, Qt 6.2+
+     - CMake 3.16+, Qt 6.8 LTS
    * - **Experience**
      - C++17, basic Linux command line, basic Qt familiarity
 

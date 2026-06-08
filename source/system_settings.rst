@@ -3,8 +3,7 @@ System Settings — Bedrock V3000 on Linux
 
 The Linux kernel defaults are tuned for general workloads, not sustained
 1.25 GB/s camera streams. These settings must be applied before running
-the application. All commands assume the V3000 running Ubuntu 22.04 LTS
-or equivalent.
+the application. All commands assume the V3000 running Ubuntu 24.04 LTS.
 
 OS Receive Buffer Size
 -----------------------

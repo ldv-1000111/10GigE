@@ -43,7 +43,7 @@ This file tells ReadTheDocs exactly how to build your docs:
    version: 2
 
    build:
-     os: ubuntu-22.04
+     os: ubuntu-24.04
      tools:
        python: "3.11"
 

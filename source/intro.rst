@@ -177,6 +177,8 @@ Document Structure
      - Building the Application
      - Camera discovery, feature configuration, asynchronous
        acquisition pipeline, image transformation, saving frames.
+       External trigger methods: Action Commands (UDP/Ethernet),
+       TTL-24V hardware line, and software trigger via Qt.
    * - **V**
      - Complete Application
      - Full annotated C++ source listing, CMakeLists.txt, build

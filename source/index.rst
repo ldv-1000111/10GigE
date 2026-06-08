@@ -57,6 +57,10 @@ Ultra-High-Resolution Machine Vision with Geolocation on Linux
    async_acquisition
    image_transformation
    saving_frames
+   trigger_overview
+   trigger_action_commands
+   trigger_hardware_ttl
+   trigger_software_qt
 
 .. toctree::
    :maxdepth: 2

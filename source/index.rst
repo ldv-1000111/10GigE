@@ -62,6 +62,7 @@ Ultra-High-Resolution Machine Vision with Geolocation on Linux
    trigger_action_commands
    trigger_hardware_ttl
    trigger_software_qt
+   qt_ui_layout
 
 .. toctree::
    :maxdepth: 2

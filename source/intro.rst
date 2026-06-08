@@ -172,7 +172,8 @@ Document Structure
    * - **III**
      - System & SDK Setup
      - Physical connections, OS tuning (MTU, buffers, real-time
-       scheduling, NVMe), Vimba X installation, Qt project setup.
+       scheduling, NVMe), Vimba X installation, development on a
+       generic x86 machine using the Camera Simulator, Qt project setup.
    * - **IV**
      - Building the Application
      - Camera discovery, feature configuration, asynchronous

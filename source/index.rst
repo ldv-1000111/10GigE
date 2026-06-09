@@ -47,6 +47,8 @@ Ultra-High-Resolution Machine Vision with Geolocation on Linux
    system_settings
    sdk_installation
    dev_x86_setup
+   laptop_setup
+   nuc_setup
    project_setup
 
 .. toctree::

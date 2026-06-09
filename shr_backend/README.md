@@ -1,34 +1,25 @@
 # SHR Camera Backend
 
-Stage 1 — Headless acquisition daemon for the Bedrock V3000 / Intel NUC.
+Headless acquisition daemon for the Bedrock V3000 / Intel NUC13ANHi7.
 
-## Quick start
+See the full documentation for setup and build procedures:
+https://shr-10gige-bedrock-docs.readthedocs.io
+
+## Build
 
 ```bash
-# 1. Install Vimba X on the laptop
-bash scripts/00_install_vimba.sh
-source ~/.bashrc
+source ~/.bashrc   # ensure VIMBAX_DIR is set
 
-# 2. Setup the NUC (run once)
-ssh lvs@192.168.1.50 "bash -s" < scripts/01_setup_nuc.sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j$(nproc)
+```
 
-# 3. Build on the laptop
-bash scripts/02_build.sh Release
+## Run (with Camera Simulator)
 
-# 4. Deploy to NUC
-bash scripts/03_deploy.sh
-
-# 5. Run on NUC manually (first time)
-ssh lvs@192.168.1.50
-cd ~/shr
-LD_LIBRARY_PATH=~/vimba_libs GENICAM_GENTL64_PATH=~/vimba_libs \
-  ./SHR_Backend --simulator --gnss-port /tmp/ttyGNSS
-
-# 6. Simulate GNSS from laptop (separate terminal)
-bash scripts/05_gnss_sim.sh nuc
-
-# 7. Run Stage 1 tests
-bash scripts/04_test_stage1.sh
+```bash
+cd build
+LD_LIBRARY_PATH=. GENICAM_GENTL64_PATH=. \
+  ./SHR_Backend --simulator --gnss-port /dev/ttyUSB0
 ```
 
 ## CLI options
@@ -51,17 +42,4 @@ nc 192.168.1.50 9100
 
 # Send a software trigger:
 echo '{"type":"trigger","target":"both"}' | nc 192.168.1.50 9100
-
-# Start acquisition:
-echo '{"type":"start"}' | nc 192.168.1.50 9100
-```
-
-## Deploy as systemd service (after Stage 1 passes)
-
-```bash
-ssh lvs@192.168.1.50
-sudo cp ~/shr/systemd/shr-backend.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now shr-backend
-sudo systemctl status shr-backend
 ```

@@ -5,12 +5,14 @@
 #  Ubuntu 24.04 x86_64
 #
 #  Run once:  bash scripts/00_install_vimba.sh
+#
+#  The script locates the Vimba X archive automatically by
+#  searching common locations for any VimbaX*.tar.gz file.
+#  Place the downloaded archive anywhere under ~/ before running.
 # ============================================================
 set -euo pipefail
 
 VIMBA_VERSION="2026-1"
-VIMBA_ARCHIVE="VimbaX_${VIMBA_VERSION}_Linux_x86_64.tar.gz"
-VIMBA_URL="https://www.alliedvision.com/fileadmin/content/software/software/VimbaX/${VIMBA_ARCHIVE}"
 VIMBA_INSTALL_DIR="${HOME}/VimbaX_${VIMBA_VERSION}"
 
 echo "============================================================"
@@ -32,63 +34,104 @@ sudo apt-get install -y \
     python3 python3-pip \
     net-tools iproute2 \
     libusb-1.0-0 libusb-1.0-0-dev
-
 echo "  ✓ System dependencies installed"
 
-# ── Step 2: download Vimba X ────────────────────────────────
+# ── Step 2: locate archive ───────────────────────────────────
 echo ""
-echo "[2/6] Downloading Vimba X ${VIMBA_VERSION}..."
-echo "  NOTE: Vimba X requires free registration at alliedvision.com"
-echo "        Download manually if the direct URL fails:"
-echo "        https://www.alliedvision.com/en/support/software-downloads/"
-echo ""
+echo "[2/6] Locating Vimba X archive..."
 
-if [ -f "${HOME}/${VIMBA_ARCHIVE}" ]; then
-    echo "  Archive already present: ${HOME}/${VIMBA_ARCHIVE}"
-elif [ -f "${HOME}/Downloads/${VIMBA_ARCHIVE}" ]; then
-    echo "  Found in Downloads, copying..."
-    cp "${HOME}/Downloads/${VIMBA_ARCHIVE}" "${HOME}/"
-else
-    echo "  Attempting download (may require login)..."
-    wget -q --show-progress -O "${HOME}/${VIMBA_ARCHIVE}" "${VIMBA_URL}" || {
-        echo ""
-        echo "  ✗ Auto-download failed (login required)."
-        echo "    Please download ${VIMBA_ARCHIVE} manually and place it in ${HOME}/"
-        echo "    Then re-run this script."
-        exit 1
-    }
-fi
-echo "  ✓ Archive ready"
+ARCHIVE=""
+for CANDIDATE in \
+    "${HOME}"/VimbaX*.tar.gz \
+    "${HOME}/Downloads"/VimbaX*.tar.gz \
+    "${HOME}/Desktop"/VimbaX*.tar.gz
+do
+    # glob may not expand — check each
+    for F in ${CANDIDATE}; do
+        if [ -f "${F}" ]; then
+            ARCHIVE="${F}"
+            break 2
+        fi
+    done
+done
 
-# ── Step 3: extract ─────────────────────────────────────────
-echo ""
-echo "[3/6] Extracting to ${VIMBA_INSTALL_DIR}..."
-if [ -d "${VIMBA_INSTALL_DIR}" ]; then
-    echo "  Directory exists, skipping extraction"
-else
-    tar -xzf "${HOME}/${VIMBA_ARCHIVE}" -C "${HOME}/"
-    echo "  ✓ Extracted"
-fi
-
-# ── Step 4: install GigE Transport Layer ────────────────────
-echo ""
-echo "[4/6] Installing GigE Transport Layer..."
-CTI_DIR="${VIMBA_INSTALL_DIR}/cti"
-if [ -f "${CTI_DIR}/VimbaGigETL_Install.sh" ]; then
-    sudo bash "${CTI_DIR}/VimbaGigETL_Install.sh"
-    echo "  ✓ GigE TL installed"
-else
-    echo "  ✗ VimbaGigETL_Install.sh not found at ${CTI_DIR}"
-    echo "    Check your Vimba X archive structure"
+if [ -z "${ARCHIVE}" ]; then
+    echo ""
+    echo "  ✗ No VimbaX*.tar.gz archive found."
+    echo ""
+    echo "  Please download Vimba X ${VIMBA_VERSION} for Linux x86_64 from:"
+    echo "  https://www.alliedvision.com/en/support/software-downloads/"
+    echo ""
+    echo "  Place the downloaded .tar.gz anywhere under ~/ and re-run this script."
     exit 1
 fi
 
-# ── Step 5: environment variables ───────────────────────────
+echo "  ✓ Found archive: ${ARCHIVE}"
+echo "  Verifying..."
+
+# Verify it is actually a gzip archive
+if ! file "${ARCHIVE}" | grep -q "gzip"; then
+    echo ""
+    echo "  ✗ ${ARCHIVE} is not a valid gzip archive."
+    echo "  $(file "${ARCHIVE}")"
+    echo ""
+    echo "  The file may be a partial or failed download."
+    echo "  Please re-download from alliedvision.com and try again."
+    exit 1
+fi
+echo "  ✓ Archive is valid gzip"
+
+# ── Step 3: extract ──────────────────────────────────────────
+echo ""
+echo "[3/6] Extracting..."
+
+# Find the top-level directory name inside the archive
+ARCHIVE_ROOT=$(tar -tzf "${ARCHIVE}" | head -1 | cut -d/ -f1)
+echo "  Archive root: ${ARCHIVE_ROOT}"
+echo "  Extracting to ${HOME}/${ARCHIVE_ROOT}..."
+
+if [ -d "${HOME}/${ARCHIVE_ROOT}" ]; then
+    echo "  Directory already exists, skipping extraction"
+else
+    tar -xzf "${ARCHIVE}" -C "${HOME}/"
+    echo "  ✓ Extracted"
+fi
+
+# Create a stable symlink at the expected install dir
+if [ "${HOME}/${ARCHIVE_ROOT}" != "${VIMBA_INSTALL_DIR}" ]; then
+    echo "  Creating symlink: ${VIMBA_INSTALL_DIR} → ${HOME}/${ARCHIVE_ROOT}"
+    ln -snf "${HOME}/${ARCHIVE_ROOT}" "${VIMBA_INSTALL_DIR}"
+fi
+
+echo "  ✓ Vimba X available at ${VIMBA_INSTALL_DIR}"
+
+# ── Step 4: install GigE Transport Layer ─────────────────────
+echo ""
+echo "[4/6] Installing GigE Transport Layer..."
+
+CTI_INSTALL=""
+for CANDIDATE in \
+    "${VIMBA_INSTALL_DIR}/cti/VimbaGigETL_Install.sh" \
+    "${VIMBA_INSTALL_DIR}/Tools/Viewer/Bin/x86_64bit/VimbaGigETL_Install.sh"
+do
+    if [ -f "${CANDIDATE}" ]; then
+        CTI_INSTALL="${CANDIDATE}"
+        break
+    fi
+done
+
+if [ -z "${CTI_INSTALL}" ]; then
+    echo "  ⚠ VimbaGigETL_Install.sh not found — skipping"
+    echo "  You may need to install the GigE TL manually."
+    echo "  Look inside: ${VIMBA_INSTALL_DIR}"
+else
+    sudo bash "${CTI_INSTALL}"
+    echo "  ✓ GigE TL installed"
+fi
+
+# ── Step 5: environment variables ────────────────────────────
 echo ""
 echo "[5/6] Setting up environment variables..."
-PROFILE_LINE_1="export VIMBAX_DIR=${VIMBA_INSTALL_DIR}"
-PROFILE_LINE_2="export LD_LIBRARY_PATH=\${VIMBAX_DIR}/api/lib/x86_64:\${LD_LIBRARY_PATH:-}"
-PROFILE_LINE_3="export GENICAM_GENTL64_PATH=\${VIMBAX_DIR}/cti"
 
 PROFILE_FILE="${HOME}/.bashrc"
 
@@ -97,46 +140,54 @@ add_if_missing() {
 }
 
 add_if_missing "# Vimba X ${VIMBA_VERSION}"
-add_if_missing "${PROFILE_LINE_1}"
-add_if_missing "${PROFILE_LINE_2}"
-add_if_missing "${PROFILE_LINE_3}"
+add_if_missing "export VIMBAX_DIR=${VIMBA_INSTALL_DIR}"
+add_if_missing "export LD_LIBRARY_PATH=\${VIMBAX_DIR}/api/lib/x86_64:\${LD_LIBRARY_PATH:-}"
+add_if_missing "export GENICAM_GENTL64_PATH=\${VIMBAX_DIR}/cti"
 
-# Also export for this session
 export VIMBAX_DIR="${VIMBA_INSTALL_DIR}"
 export LD_LIBRARY_PATH="${VIMBA_INSTALL_DIR}/api/lib/x86_64:${LD_LIBRARY_PATH:-}"
 export GENICAM_GENTL64_PATH="${VIMBA_INSTALL_DIR}/cti"
 
 echo "  ✓ Added to ${PROFILE_FILE}"
 
-# ── Step 6: verify ──────────────────────────────────────────
+# ── Step 6: verify ───────────────────────────────────────────
 echo ""
 echo "[6/6] Verifying installation..."
 
-# Check headers
-HDR="${VIMBA_INSTALL_DIR}/api/include/VmbCPP/VmbCPP.h"
-[ -f "${HDR}" ] && echo "  ✓ VmbCPP.h found" || { echo "  ✗ VmbCPP.h not found"; exit 1; }
+# Find and report key paths
+find "${VIMBA_INSTALL_DIR}" -name "VmbCPP.h"           | head -1 | \
+    xargs -I{} echo "  ✓ VmbCPP.h: {}"
+find "${VIMBA_INSTALL_DIR}" -name "libVmbCPP.so"        | head -1 | \
+    xargs -I{} echo "  ✓ libVmbCPP.so: {}"
+find "${VIMBA_INSTALL_DIR}" -name "libVmbImageTransform.so" | head -1 | \
+    xargs -I{} echo "  ✓ libVmbImageTransform.so: {}"
+find "${VIMBA_INSTALL_DIR}" -name "*Simulator*.cti"     | head -1 | \
+    xargs -I{} echo "  ✓ Camera Simulator TL: {}" || \
+    echo "  ⚠ Camera Simulator TL not found"
+find "${VIMBA_INSTALL_DIR}" -name "VimbaX_Viewer"       | head -1 | \
+    xargs -I{} echo "  ✓ Vimba X Viewer: {}" || \
+    echo "  ⚠ Viewer not found"
 
-# Check libs
-LIB="${VIMBA_INSTALL_DIR}/api/lib/x86_64/libVmbCPP.so"
-[ -f "${LIB}" ] && echo "  ✓ libVmbCPP.so found" || { echo "  ✗ libVmbCPP.so not found"; exit 1; }
+qmake6 --version 2>/dev/null | head -1 | xargs -I{} echo "  ✓ Qt: {}" || \
+    echo "  ⚠ Qt6 qmake not found"
+cmake --version | head -1 | xargs -I{} echo "  ✓ {}"
 
-# Check Camera Simulator TL
-SIM="${VIMBA_INSTALL_DIR}/cti/VimbaCameraSimulatorTL.cti"
-[ -f "${SIM}" ] && echo "  ✓ Camera Simulator TL found" || echo "  ⚠ Camera Simulator TL not found (may be named differently)"
-
-# Check Qt
-qmake6 --version && echo "  ✓ Qt6 available" || echo "  ⚠ Qt6 qmake not found"
-
-# Check CMake
-cmake --version | head -1 && echo "  ✓ CMake available"
+# Update VIMBAX_DIR in CMakeLists.txt to use the actual path
+HEADER=$(find "${VIMBA_INSTALL_DIR}" -name "VmbCPP.h" | head -1)
+if [ -n "${HEADER}" ]; then
+    ACTUAL_API=$(dirname "$(dirname "${HEADER}")")
+    echo ""
+    echo "  API path: ${ACTUAL_API}"
+fi
 
 echo ""
 echo "============================================================"
-echo " ✓ Vimba X ${VIMBA_VERSION} installed successfully"
+echo " ✓ Vimba X ${VIMBA_VERSION} installed"
 echo ""
-echo "  IMPORTANT: Run the following to activate environment:"
-echo "    source ~/.bashrc"
+echo " IMPORTANT: activate environment now:"
+echo "   source ~/.bashrc"
 echo ""
-echo "  Then verify the Camera Simulator:"
-echo "    ${VIMBA_INSTALL_DIR}/bin/VimbaX_Viewer"
+echo " Then verify:"
+echo "   \${VIMBAX_DIR}/bin/VimbaX_Viewer"
+echo "   (Camera Simulator should appear in the camera list)"
 echo "============================================================"

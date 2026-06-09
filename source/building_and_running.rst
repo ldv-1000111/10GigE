@@ -1,118 +1,174 @@
 Building and Running
 =====================
 
+This chapter covers building and deploying both the V3000 backend daemon
+and the Android APK, and verifying the complete system end-to-end.
+
 Prerequisites Check
 --------------------
 
-Before building, verify:
+.. code-block:: bash
+
+   # V3000 — verify tools
+   g++ --version              # GCC 11+ required
+   cmake --version            # 3.16+ required
+   ls ~/VimbaX_2026-1/api/include/VmbCPP/VmbCPP.h  # SDK present
+   echo $GENICAM_GENTL64_PATH  # GigE TL registered
+   ip link show usb0           # USB NCM interface up
+
+   # Dev machine — verify Android toolchain
+   adb version                # ADB installed
+   ls ~/Android/Sdk/ndk/      # NDK present
+   ls ~/Qt/6.8.0/android_arm64_v8a/  # Qt for Android installed
+
+Building the V3000 Backend
+---------------------------
 
 .. code-block:: bash
 
-   # Compiler (need C++17 support)
-   g++ --version        # GCC 9+ required
-   cmake --version      # 3.16+ required
+   # From the project root
+   cmake -S . -B build-v3000 \
+     -DCMAKE_BUILD_TYPE=Release \
+     -DVIMBAX_DIR=~/VimbaX_2026-1
 
-   # Vimba X installed
-   ls ~/VimbaX_2026-1/api/include/VmbCPP/VmbCPP.h
-
-   # GigE Transport Layer installed
-   echo $GENICAM_GENTL64_PATH
-
-   # Runtime libs accessible
-   echo $LD_LIBRARY_PATH | grep VimbaX
-
-Build with CMake
------------------
-
-.. code-block:: bash
-
-   # From your project directory (contains CMakeLists.txt and SHR_Capture_App.cpp)
-   cmake -S . -B build -DVIMBAX_DIR=~/VimbaX_2026-1
-
-   cmake --build build
+   cmake --build build-v3000 -j$(nproc)
 
    # Binary is at:
-   ls build/SHR_Capture_App
+   ls build-v3000/SHR_Backend
 
-If Vimba X is installed in a non-default location, pass the path explicitly:
-
-.. code-block:: bash
-
-   cmake -S . -B build -DVIMBAX_DIR=/opt/VimbaX_2026-1
-
-Running the Application
-------------------------
-
-**First found camera, 10 frames:**
+Deploy to V3000:
 
 .. code-block:: bash
 
-   ./build/SHR_Capture_App
+   sudo cp build-v3000/SHR_Backend /usr/local/bin/
+   sudo systemctl restart shr-backend
+   sudo systemctl status  shr-backend
 
-**Specific camera by IP, 25 frames:**
+Expected log output:
 
-.. code-block:: bash
+.. code-block:: text
 
-   ./build/SHR_Capture_App 192.168.0.42 25
+   Jun 08 14:23:05 v3000 shr-backend[1234]: SHR Backend starting...
+   Jun 08 14:23:05 v3000 shr-backend[1234]: BackendServer: listening on port 9100
+   Jun 08 14:23:05 v3000 shr-backend[1234]: TriggerServer: listening on UDP port 9001
+   Jun 08 14:23:06 v3000 shr-backend[1234]: Camera 1: shr411CXGE connected at 192.168.10.41
+   Jun 08 14:23:06 v3000 shr-backend[1234]: Camera 2: shr411CXGE connected at 192.168.10.42
+   Jun 08 14:23:06 v3000 shr-backend[1234]: GNSS: /dev/ttyUSB0 open at 9600 baud
+   Jun 08 14:23:06 v3000 shr-backend[1234]: SHR Backend running — waiting for Android client on TCP :9100
 
-**Continuous capture until Ctrl+C:**
-
-.. code-block:: bash
-
-   ./build/SHR_Capture_App 192.168.0.42 0
-
-Expected output::
-
-   [SHR] === SHR 10GigE Capture & Transform App ===
-   [SHR] Camera IP  : 192.168.0.42
-   [SHR] Frames     : 25
-   [SHR] Buffers    : 5
-   [SHR] Format     : BayerGR12
-   [SHR] Output     : ./frames
-   [SHR] Vimba X started
-   [SHR] Opened camera: SHR 411xXGE | Model: shr411xXGE | S/N: 12345678
-   [SHR] Resolution set to: 17000 x 9000
-   [SHR] Payload size: 229 MB per frame
-   [SHR] Acquisition started — press Ctrl+C to stop
-   [SHR] Frame 1: 17000x9000
-   [SHR] Saved: ./frames/frame_00001.ppm
-   [SHR] Frame 2: 17000x9000
-   [SHR] Saved: ./frames/frame_00002.ppm
-   ...
-   [SHR] Done. Captured 25 frame(s).
-
-Viewing Saved Frames
----------------------
+Building the Android APK
+--------------------------
 
 .. code-block:: bash
 
-   # View with ImageMagick
-   display ./frames/frame_00001.ppm
+   # Set environment
+   export ANDROID_SDK_ROOT=~/Android/Sdk
+   export ANDROID_NDK_ROOT=~/Android/Sdk/ndk/26.3.11579264
+   export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 
-   # Convert to PNG
-   convert ./frames/frame_00001.ppm ./frames/frame_00001.png
+   # Configure for Android ARM64
+   cmake -S . -B build-android \
+     -DCMAKE_SYSTEM_NAME=Android \
+     -DCMAKE_ANDROID_ARCH_ABI=arm64-v8a \
+     -DCMAKE_ANDROID_NDK=$ANDROID_NDK_ROOT \
+     -DANDROID_PLATFORM=android-26 \
+     -DCMAKE_PREFIX_PATH=~/Qt/6.8.0/android_arm64_v8a
 
-   # View with GNOME image viewer
-   eog ./frames/
+   cmake --build build-android --target SHR_Camera_Android
 
-   # Check image dimensions
-   identify ./frames/frame_00001.ppm
+   # Install to connected Android tablet
+   adb install build-android/android-build/SHR_Camera_Android.apk
 
-Modifying the Configuration
------------------------------
+Verifying the Complete System
+-------------------------------
 
-Edit the ``AppConfig`` struct in ``SHR_Capture_App.cpp`` to change defaults:
+**Step 1 — Connect hardware:**
 
-.. code-block:: cpp
+.. code-block:: text
 
-   struct AppConfig
-   {
-       std::string cameraIP     = "192.168.0.42"; // Fixed IP
-       int         frameCount   = 0;              // Continuous
-       int         bufferCount  = 8;              // More buffers for high res
-       std::string pixelFormat  = "BayerGR12";
-       bool        saveFrames   = true;
-       std::string outputDir    = "/mnt/fast-ssd/frames"; // Fast storage
-       bool        colorCorrect = true;
-       int         debayerMode  = 1;              // 3x3 better quality
-   };
+   USB-C cable: Android tablet → Bedrock V3000
+   SFP+ 0:      SHR Camera 1  → V3000 10GbE port 0
+   SFP+ 1:      SHR Camera 2  → V3000 10GbE port 1
+   USB-A:       GNSS receiver → V3000 USB port
+
+**Step 2 — Verify USB NCM link:**
+
+.. code-block:: bash
+
+   # On V3000
+   ping 192.168.100.2 -c 3       # Android tablet should respond
+
+   # On Android (via ADB)
+   adb shell ping 192.168.100.1 -c 3   # V3000 should respond
+
+**Step 3 — Launch the Android app:**
+
+The app auto-connects to ``192.168.100.1:9100`` on startup. Within
+2–3 seconds the title bar badges should show:
+
+.. code-block:: text
+
+   ⬤ Connected    ⬤ Cam 1    ⬤ Cam 2    ⬤ Acquiring
+
+**Step 4 — Verify GNSS:**
+
+The GNSS panel in the right column should show ``GPS 3D`` fix badge
+and live coordinates within 30–60 seconds of the receiver getting a
+lock. If no fix appears, check ``/dev/ttyUSB0`` is present on the V3000:
+
+.. code-block:: bash
+
+   ls /dev/ttyUSB*
+   # Expected: /dev/ttyUSB0
+
+**Step 5 — Trigger a test capture:**
+
+Tap **Trigger both cameras** in the Android app. The frame log should
+immediately show two new entries — one per camera — with geo-tag status.
+
+Check frames were written to the V3000:
+
+.. code-block:: bash
+
+   ls -lh /mnt/frames/
+   # Expected: frame_00001.ppm  frame_00001.json
+   #           frame_00002.ppm  frame_00002.json  (one per camera)
+
+   cat /mnt/frames/frame_00001.json | python3 -m json.tool
+
+Tail the backend log for live output:
+
+.. code-block:: bash
+
+   journalctl -u shr-backend -f
+
+Expected per trigger:
+
+.. code-block:: text
+
+   BackendServer: frame 1 cam1 — geo-tagged — 163ms
+   BackendServer: frame 1 cam2 — geo-tagged — 161ms
+   BackendServer: Android client status push OK
+
+Running Without a Real Camera (Development)
+--------------------------------------------
+
+Use the Vimba X Camera Simulator and a ``socat`` virtual serial port
+as described in :doc:`dev_x86_setup`:
+
+.. code-block:: bash
+
+   # Terminal 1 — simulate GNSS
+   socat PTY,link=/tmp/ttyGNSS0,raw,echo=0 \
+         PTY,link=/tmp/ttyGNSS1,raw,echo=0 &
+   while true; do
+     echo '$GNGGA,142311.000,4808.2292,N,01134.5674,E,1,09,0.9,524.3,M,47.8,M,,*40'
+     echo '$GNRMC,142311.000,A,4808.2292,N,01134.5674,E,0.00,0.00,070626,,,A*6F'
+     sleep 1
+   done > /tmp/ttyGNSS0
+
+   # Terminal 2 — run backend (update GNSS port in config)
+   ./build-v3000/SHR_Backend --gnss-port /tmp/ttyGNSS1
+
+   # Terminal 3 — test backend from command line
+   echo '{"type":"trigger","target":"both"}' | nc 192.168.100.1 9100

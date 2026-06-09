@@ -1,6 +1,16 @@
 Qt Application Layout & File Structure
 ========================================
 
+.. note::
+   This chapter describes the **QWidget-based layout** used if the
+   application is built for a desktop or tethered touchscreen on the
+   V3000 directly. In the primary two-process architecture, the UI
+   lives on the **Android tablet as QML** — see :doc:`android_qml_ui`
+   for the QML equivalents of every widget described here.
+
+   This chapter remains relevant if you need a desktop fallback, a
+   development-machine UI, or a tethered HDMI touchscreen build.
+
 This chapter describes how the Qt application is structured — which files
 own which parts of the UI, and how the widgets map to the visual layout
 shown in the mockup. The same structure supports both single-camera and

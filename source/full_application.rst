@@ -1,280 +1,381 @@
-Full Application Source
-========================
+Complete Application — Source Listings
+========================================
 
-Below is the complete, annotated source code for the SHR 10GigE capture and
-image transformation application. Every section corresponds to a chapter in
+This chapter provides the complete annotated source listings for both
+processes of the application. Each file corresponds to a chapter in
 this tutorial.
 
-.. tip::
-   Download the source file directly: :download:`SHR_Capture_App.cpp <_static/SHR_Capture_App.cpp>`
+The application comprises two independent binaries:
 
-SHR_Capture_App.cpp
---------------------
+.. list-table::
+   :header-rows: 1
+   :widths: 30 30 40
 
-Includes and configuration
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   * - Binary
+     - Runs on
+     - Entry point
+   * - ``SHR_Backend``
+     - Bedrock V3000
+     - ``main_v3000.cpp`` (``QCoreApplication``)
+   * - ``SHR_Camera_Android``
+     - Android tablet
+     - ``main_android.cpp`` (``QGuiApplication``)
+
+----
+
+Part A — V3000 Backend
+------------------------
+
+File structure
+^^^^^^^^^^^^^^
+
+.. code-block:: text
+
+   shr_backend/
+   ├── main_v3000.cpp              ← QCoreApplication entry point
+   │
+   ├── camera/
+   │   ├── CameraWorker.h/.cpp     ← Vimba X per-camera acquisition thread
+   │   └── FramePayload.h          ← frame + GNSS bundle passed to worker
+   │
+   ├── gnss/
+   │   ├── NmeaReader.h/.cpp       ← QSerialPort + NMEA parser
+   │   └── GnssRecord.h            ← atomic shared GNSS data structure
+   │
+   ├── transform/
+   │   └── ImageTransform.h/.cpp   ← VmbImageTransform wrapper
+   │
+   ├── storage/
+   │   └── SidecarWriter.h/.cpp    ← JSON sidecar file writer
+   │
+   ├── trigger/
+   │   └── TriggerServer.h/.cpp    ← UDP :9001 Action Command listener
+   │
+   ├── server/
+   │   └── BackendServer.h/.cpp    ← TCP :9100 Android client server
+   │
+   └── systemd/
+       └── shr-backend.service     ← systemd unit for autostart at boot
+
+main_v3000.cpp
+^^^^^^^^^^^^^^
 
 .. code-block:: cpp
 
-   #include <iostream>
-   #include <fstream>
-   #include <sstream>
-   #include <string>
-   #include <vector>
-   #include <atomic>
-   #include <thread>
-   #include <chrono>
-   #include <mutex>
-   #include <condition_variable>
+   // main_v3000.cpp — V3000 headless acquisition daemon
+   // QCoreApplication: no display, no UI dependency
+   #include <QCoreApplication>
+   #include <QThread>
+   #include <QTimer>
    #include <csignal>
-   #include <iomanip>
 
-   #include "VmbCPP/VmbCPP.h"
-   #include "VmbImageTransform/VmbTransform.h"
+   #include "camera/CameraWorker.h"
+   #include "gnss/NmeaReader.h"
+   #include "trigger/TriggerServer.h"
+   #include "server/BackendServer.h"
 
-   using namespace VmbCPP;
+   static QCoreApplication* g_app = nullptr;
 
-   struct AppConfig
+   void signalHandler(int)
    {
-       std::string cameraIP     = "";          // Empty = first found
-       int         frameCount   = 10;          // 0 = continuous
-       int         bufferCount  = 5;
-       std::string pixelFormat  = "BayerGR12";
-       bool        saveFrames   = true;
-       std::string outputDir    = "./frames";
-       bool        colorCorrect = false;
-       int         debayerMode  = 0;           // 0=2x2, 1=3x3, 2=LCAA, 3=LCAAV
-   };
-
-   static std::atomic<bool> g_running{true};
-   static std::atomic<int>  g_framesCaptured{0};
-   static AppConfig         g_config;
-
-   void signalHandler(int) { g_running = false; }
-
-Image transformation function
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-.. code-block:: cpp
-
-   bool transformFrame(
-       void*              pSrcData,
-       VmbPixelFormat_t   srcFormat,
-       VmbUint32_t        width,
-       VmbUint32_t        height,
-       std::vector<uint8_t>& outBuffer)
-   {
-       VmbImage sourceImage{};
-       VmbImage destinationImage{};
-       sourceImage.Size      = sizeof(sourceImage);
-       destinationImage.Size = sizeof(destinationImage);
-       sourceImage.Data      = pSrcData;
-       destinationImage.Data = outBuffer.data();
-
-       VmbError_t err;
-       err = VmbSetImageInfoFromPixelFormat(srcFormat, width, height, &sourceImage);
-       if (err != VmbErrorSuccess) return false;
-
-       err = VmbSetImageInfoFromInputImage(&sourceImage, VmbPixelLayoutRGB, 8,
-                                           &destinationImage);
-       if (err != VmbErrorSuccess) return false;
-
-       std::vector<VmbTransformInfo> params;
-
-       VmbTransformInfo debayerInfo{};
-       VmbDebayerMode_t mode = VmbDebayerMode2x2;
-       if (g_config.debayerMode == 1) mode = VmbDebayerMode3x3;
-       if (g_config.debayerMode == 2) mode = VmbDebayerModeLCAA;
-       if (g_config.debayerMode == 3) mode = VmbDebayerModeLCAAV;
-       VmbSetDebayerMode(mode, &debayerInfo);
-       params.push_back(debayerInfo);
-
-       if (g_config.colorCorrect)
-       {
-           VmbTransformInfo ccInfo{};
-           const VmbFloat_t mat[] = { 1.0f,0.0f,0.0f, 0.0f,1.0f,0.0f, 0.0f,0.0f,1.0f };
-           VmbSetColorCorrectionMatrix3x3(mat, &ccInfo);
-           params.push_back(ccInfo);
-       }
-
-       err = VmbImageTransform(&sourceImage, &destinationImage,
-                               params.data(),
-                               static_cast<VmbUint32_t>(params.size()));
-       return err == VmbErrorSuccess;
+       if (g_app) g_app->quit();
    }
 
-Save frame as PPM
-^^^^^^^^^^^^^^^^^^
-
-.. code-block:: cpp
-
-   void saveFrame(const std::vector<uint8_t>& rgb,
-                  VmbUint32_t w, VmbUint32_t h, int index)
+   int main(int argc, char* argv[])
    {
-       std::ostringstream path;
-       path << g_config.outputDir << "/frame_"
-            << std::setw(5) << std::setfill('0') << index << ".ppm";
+       QCoreApplication app(argc, argv);
+       g_app = &app;
 
-       std::ofstream file(path.str(), std::ios::binary);
-       if (!file) { std::cerr << "Cannot write: " << path.str() << std::endl; return; }
+       app.setApplicationName("SHR-Backend");
+       app.setApplicationVersion("1.0");
 
-       file << "P6\n" << w << " " << h << "\n255\n";
-       file.write(reinterpret_cast<const char*>(rgb.data()), rgb.size());
-       std::cout << "[SHR] Saved: " << path.str() << std::endl;
+       std::signal(SIGINT,  signalHandler);
+       std::signal(SIGTERM, signalHandler);
+
+       qInfo() << "SHR Backend starting...";
+
+       // ── GNSS reader ────────────────────────────────────────────
+       auto* gnssThread = new QThread(&app);
+       auto* nmea       = new NmeaReader();
+       nmea->moveToThread(gnssThread);
+
+       QObject::connect(gnssThread, &QThread::started, nmea,
+           [nmea]{ nmea->open("/dev/ttyUSB0", 9600); });
+       gnssThread->start();
+
+       // ── Camera workers ─────────────────────────────────────────
+       auto* thread1 = new QThread(&app);
+       auto* thread2 = new QThread(&app);
+       auto* worker1 = new CameraWorker("192.168.10.41");
+       auto* worker2 = new CameraWorker("192.168.10.42");
+       worker1->moveToThread(thread1);
+       worker2->moveToThread(thread2);
+
+       // ── Trigger server (UDP :9001) ─────────────────────────────
+       auto* trigServer = new TriggerServer(9001, &app);
+       trigServer->start();
+
+       // ── Backend server (TCP :9100) ─────────────────────────────
+       auto* backend = new BackendServer(9100, &app);
+       backend->start();
+
+       // ── Wire camera metrics → backend status ───────────────────
+       auto wireMetrics = [backend](CameraWorker* w, int idx) {
+           QObject::connect(w, &CameraWorker::metricsUpdated,
+               backend, [backend, idx](double fps, qint64 written,
+                                       int bufFree, double bw) {
+                   BackendServer::CameraStatus s;
+                   s.fps = fps; s.written_gb = written / 1e9;
+                   s.bw_gbs = bw; s.buf_free = bufFree;
+                   backend->updateCameraStatus(idx, s);
+               });
+       };
+       wireMetrics(worker1, 1);
+       wireMetrics(worker2, 2);
+
+       // ── Wire frame events → backend log ────────────────────────
+       auto wireFrames = [backend](CameraWorker* w, int idx) {
+           QObject::connect(w, &CameraWorker::frameReady,
+               backend, [backend, idx](int fi, QImage, bool geo) {
+                   backend->onFrameProcessed(idx, fi, geo, 0,
+                       QDateTime::currentDateTimeUtc()
+                           .toString("HH:mm:ss.zzz"));
+               });
+       };
+       wireFrames(worker1, 1);
+       wireFrames(worker2, 2);
+
+       // ── Wire backend commands → camera workers ─────────────────
+       QObject::connect(backend, &BackendServer::triggerRequested,
+           &app, [worker1, worker2](int cam) {
+               if (cam == 0 || cam == 1) worker1->softwareTrigger();
+               if (cam == 0 || cam == 2) worker2->softwareTrigger();
+           });
+
+       QObject::connect(backend, &BackendServer::startRequested,
+           &app, [worker1, worker2]() {
+               worker1->start(); worker2->start();
+           });
+
+       QObject::connect(backend, &BackendServer::stopRequested,
+           &app, [worker1, worker2]() {
+               worker1->stop(); worker2->stop();
+           });
+
+       // ── Wire external UDP trigger ──────────────────────────────
+       QObject::connect(trigServer, &TriggerServer::triggerReceived,
+           &app, [worker1, worker2]() {
+               worker1->softwareTrigger();
+               worker2->softwareTrigger();
+           });
+
+       // ── Start camera threads ───────────────────────────────────
+       QObject::connect(thread1, &QThread::started,
+                        worker1, &CameraWorker::start);
+       QObject::connect(thread2, &QThread::started,
+                        worker2, &CameraWorker::start);
+       thread1->start();
+       thread2->start();
+
+       qInfo() << "SHR Backend running — waiting for Android client on TCP :9100";
+
+       int ret = app.exec();
+
+       // ── Clean shutdown ─────────────────────────────────────────
+       worker1->stop(); worker2->stop();
+       thread1->quit(); thread1->wait();
+       thread2->quit(); thread2->wait();
+       gnssThread->quit(); gnssThread->wait();
+
+       qInfo() << "SHR Backend stopped.";
+       return ret;
    }
 
-Frame observer
-^^^^^^^^^^^^^^^
+shr-backend.service — systemd unit
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. code-block:: cpp
+The V3000 backend runs as a systemd service, starting automatically at
+boot before any user session:
 
-   class FrameObserver : public IFrameObserver
-   {
-   public:
-       explicit FrameObserver(CameraPtr pCamera) : IFrameObserver(pCamera) {}
+.. code-block:: ini
 
-       void FrameReceived(const FramePtr pFrame) override
-       {
-           VmbFrameStatusType status;
-           if (VmbErrorSuccess != pFrame->GetReceiveStatus(status) ||
-               status != VmbFrameStatusComplete)
-           {
-               m_pCamera->QueueFrame(pFrame);
-               return;
-           }
+   # /etc/systemd/system/shr-backend.service
+   [Unit]
+   Description=SHR 10GigE Acquisition Backend
+   After=network.target usb-gadget.service
+   Requires=usb-gadget.service
 
-           VmbUint32_t w = 0, h = 0;
-           VmbPixelFormat_t fmt{};
-           void* pData = nullptr;
-           pFrame->GetWidth(w);
-           pFrame->GetHeight(h);
-           pFrame->GetPixelFormat(fmt);
-           pFrame->GetImage(pData);
+   [Service]
+   Type=simple
+   User=luis
+   WorkingDirectory=/home/luis
+   ExecStart=/usr/local/bin/SHR_Backend
+   Restart=on-failure
+   RestartSec=3s
+   Environment="LD_LIBRARY_PATH=/home/luis/VimbaX_2026-1/api/lib/x86_64"
+   Environment="GENICAM_GENTL64_PATH=/home/luis/VimbaX_2026-1/cti"
 
-           int idx = ++g_framesCaptured;
-           std::cout << "[SHR] Frame " << idx
-                     << ": " << w << "x" << h << std::endl;
+   # Real-time scheduling permission
+   LimitRTPRIO=99
+   LimitMEMLOCK=infinity
 
-           std::vector<uint8_t> rgb(w * h * 3);
-           if (transformFrame(pData, fmt, w, h, rgb) && g_config.saveFrames)
-               saveFrame(rgb, w, h, idx);
+   # Logging
+   StandardOutput=journal
+   StandardError=journal
+   SyslogIdentifier=shr-backend
 
-           if (g_config.frameCount > 0 && idx >= g_config.frameCount)
-           {
-               g_running = false;
-               return;   // Don't requeue — we're done
-           }
+   [Install]
+   WantedBy=multi-user.target
 
-           m_pCamera->QueueFrame(pFrame);
-       }
-   };
+Install and enable:
 
-Feature helpers
+.. code-block:: bash
+
+   # Copy binary to system path
+   sudo cp build/SHR_Backend /usr/local/bin/
+   sudo chmod +x /usr/local/bin/SHR_Backend
+
+   # Install and enable the service
+   sudo cp systemd/shr-backend.service /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo systemctl enable shr-backend
+   sudo systemctl start shr-backend
+
+   # Check status
+   sudo systemctl status shr-backend
+   journalctl -u shr-backend -f
+
+----
+
+Part B — Android Frontend
+--------------------------
+
+File structure
+^^^^^^^^^^^^^^
+
+.. code-block:: text
+
+   shr_android/
+   ├── main_android.cpp            ← QGuiApplication entry point
+   ├── BackendClient.h/.cpp        ← TCP client, Q_PROPERTY → QML
+   │
+   └── qml/
+       ├── MainView.qml            ← root ApplicationWindow
+       ├── CameraPanel.qml         ← per-camera preview + metrics
+       ├── TriggerBar.qml          ← trigger + start/stop buttons
+       ├── RightPanel.qml          ← GNSS + sync + log container
+       ├── GnssPanel.qml           ← coordinate display
+       ├── SyncPanel.qml           ← sync metrics 2×2 grid
+       ├── SectionWidget.qml       ← collapsible section
+       ├── FrameLog.qml            ← scrollable frame log
+       └── styles/
+           └── colors.js           ← shared colour palette
+
+main_android.cpp
 ^^^^^^^^^^^^^^^^
 
 .. code-block:: cpp
 
-   VmbError_t setEnum(CameraPtr& cam, const char* name, const char* val)
-   {
-       FeaturePtr f; VmbError_t e = cam->GetFeatureByName(name, f);
-       if (e != VmbErrorSuccess) return e;
-       return f->SetValue(val);
-   }
-
-   VmbError_t setInt(CameraPtr& cam, const char* name, VmbInt64_t val)
-   {
-       FeaturePtr f; VmbError_t e = cam->GetFeatureByName(name, f);
-       if (e != VmbErrorSuccess) return e;
-       return f->SetValue(val);
-   }
-
-   VmbError_t runCmd(CameraPtr& cam, const char* name)
-   {
-       FeaturePtr f; VmbError_t e = cam->GetFeatureByName(name, f);
-       if (e != VmbErrorSuccess) return e;
-       return f->RunCommand();
-   }
-
-   VmbError_t getInt(CameraPtr& cam, const char* name, VmbInt64_t& val)
-   {
-       FeaturePtr f; VmbError_t e = cam->GetFeatureByName(name, f);
-       if (e != VmbErrorSuccess) return e;
-       return f->GetValue(val);
-   }
-
-main() — startup and camera open
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-.. code-block:: cpp
+   // main_android.cpp — Android Qt entry point
+   #include <QGuiApplication>
+   #include <QQmlApplicationEngine>
+   #include <QQmlContext>
+   #include "BackendClient.h"
 
    int main(int argc, char* argv[])
    {
-       if (argc > 1) g_config.cameraIP   = argv[1];
-       if (argc > 2) g_config.frameCount = std::stoi(argv[2]);
+       QGuiApplication app(argc, argv);
+       app.setApplicationName("SHR Camera Control");
+       app.setApplicationVersion("1.0");
 
-       std::signal(SIGINT,  signalHandler);
-       std::signal(SIGTERM, signalHandler);
-       std::filesystem::create_directories(g_config.outputDir);
+       BackendClient backend;
 
-       VmbSystem& system = VmbSystem::GetInstance();
-       if (system.Startup() != VmbErrorSuccess) return 1;
+       QQmlApplicationEngine engine;
 
-       CameraPtr camera;
-       if (!g_config.cameraIP.empty())
-       {
-           system.OpenCameraByID(g_config.cameraIP.c_str(),
-                                 VmbAccessModeFull, camera);
-       }
-       else
-       {
-           CameraPtrVector cameras;
-           system.GetCameras(cameras);
-           camera = cameras.at(0);
-           camera->Open(VmbAccessModeFull);
-       }
+       // Expose backend singleton to all QML files
+       engine.rootContext()->setContextProperty("backend", &backend);
 
-main() — configure, acquire, shutdown
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+       const QUrl url("qrc:/SHRCamera/qml/MainView.qml");
+       QObject::connect(&engine,
+           &QQmlApplicationEngine::objectCreated,
+           &app, [url](QObject* obj, const QUrl& objUrl) {
+               if (!obj && url == objUrl)
+                   QCoreApplication::exit(-1);
+           }, Qt::QueuedConnection);
 
-.. code-block:: cpp
+       engine.load(url);
 
-       setEnum(camera, "PixelFormat",    g_config.pixelFormat.c_str());
-       setEnum(camera, "AcquisitionMode","Continuous");
-       setInt (camera, "GVSPBurstSize",  64);
+       // Auto-connect to V3000 on USB NCM fixed address
+       backend.connectToV3000("192.168.100.1", 9100);
 
-       VmbInt64_t maxW = 0, maxH = 0;
-       getInt(camera, "WidthMax",  maxW);
-       getInt(camera, "HeightMax", maxH);
-       if (maxW) setInt(camera, "Width",  maxW);
-       if (maxH) setInt(camera, "Height", maxH);
+       return app.exec();
+   }
 
-       VmbUint32_t payloadSize = 0;
-       camera->GetPayloadSize(payloadSize);
+RightPanel.qml
+^^^^^^^^^^^^^^
 
-       IFrameObserverPtr observer(new FrameObserver(camera));
-       FramePtrVector frames(g_config.bufferCount);
-       for (auto& f : frames)
-       {
-           f.reset(new Frame(payloadSize));
-           f->RegisterObserver(observer);
-           camera->AnnounceFrame(f);
+.. code-block:: qml
+
+   // qml/RightPanel.qml
+   import QtQuick 2.15
+   import QtQuick.Layouts 1.15
+   import "styles/colors.js" as C
+
+   Rectangle {
+       color: C.bg1
+       border.color: "#2a2d31"; border.width: 0
+
+       // Left border
+       Rectangle {
+           anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
+           width: 1; color: "#2a2d31"
        }
 
-       camera->StartCapture();
-       for (auto& f : frames) camera->QueueFrame(f);
-       runCmd(camera, "AcquisitionStart");
+       ColumnLayout {
+           anchors.fill: parent
+           spacing: 0
 
-       while (g_running)
-           std::this_thread::sleep_for(std::chrono::milliseconds(100));
+           // GNSS — always visible, no collapse
+           GnssPanel {
+               Layout.fillWidth: true
+           }
 
-       // Shutdown sequence
-       runCmd(camera, "AcquisitionStop");
-       camera->EndCapture();
-       camera->FlushQueue();
-       camera->RevokeAllFrames();
-       camera->Close();
-       system.Shutdown();
+           // Sync — always visible
+           SyncPanel {
+               Layout.fillWidth: true
+           }
 
-       std::cout << "Captured " << g_framesCaptured.load() << " frame(s)." << std::endl;
-       return 0;
+           // Camera config — collapsed by default
+           SectionWidget {
+               Layout.fillWidth: true
+               title: "Camera config"
+               expanded: false
+               content: CameraConfigBody {}
+           }
+
+           // Trigger config — collapsed by default
+           SectionWidget {
+               Layout.fillWidth: true
+               title: "Trigger config"
+               expanded: false
+               content: TriggerConfigBody {}
+           }
+
+           // Acquisition — collapsed by default
+           SectionWidget {
+               Layout.fillWidth: true
+               title: "Acquisition"
+               expanded: false
+               content: AcquisitionBody {}
+           }
+
+           // Frame log — expanded, fills remaining space
+           SectionWidget {
+               Layout.fillWidth: true
+               Layout.fillHeight: true
+               title: "Frame log"
+               expanded: true
+               content: FrameLog {}
+           }
+       }
    }

@@ -1,208 +1,275 @@
-Qt UI — GNSS Status Panel
-==========================
+GNSS UI — Android QML Components
+===================================
 
-The main window gains a GNSS status panel showing live fix data,
-a port configuration widget, and a per-frame geo-tag indicator.
+The GNSS status panel lives entirely on the Android tablet as QML
+components. The V3000 backend supplies GNSS data via the TCP status
+message; the Android ``BackendClient`` exposes it as ``Q_PROPERTY``
+values that QML binds to directly — no manual update calls needed.
 
-MainWindow Additions
----------------------
+GnssPanel.qml
+--------------
 
-Add these members to ``MainWindow.h``:
+``GnssPanel`` displays fix quality, live coordinates, satellite count,
+HDOP, and UTC time. It reads directly from ``backend`` properties.
 
-.. code-block:: cpp
+.. code-block:: qml
 
-   // GNSS components
-   NmeaReader*  m_nmeaReader  = nullptr;
-   QThread*     m_gnssThread  = nullptr;
+   // qml/GnssPanel.qml
+   import QtQuick 2.15
+   import QtQuick.Layouts 1.15
+   import "styles/colors.js" as C
 
-   // GNSS UI widgets
-   QLabel*      m_gnssStatusLabel    = nullptr;
-   QLabel*      m_gnssFixLabel       = nullptr;
-   QLabel*      m_latLabel           = nullptr;
-   QLabel*      m_lonLabel           = nullptr;
-   QLabel*      m_altLabel           = nullptr;
-   QLabel*      m_hdopLabel          = nullptr;
-   QLabel*      m_satLabel           = nullptr;
-   QComboBox*   m_portCombo          = nullptr;
-   QComboBox*   m_baudCombo          = nullptr;
-   QPushButton* m_gnssConnectBtn     = nullptr;
-   QLabel*      m_geoTagIndicator    = nullptr;
+   Rectangle {
+       color: "transparent"
 
-GNSS Panel Layout
-------------------
+       ColumnLayout {
+           anchors { fill: parent; margins: 10 }
+           spacing: 6
 
-Build the GNSS status panel in the MainWindow constructor:
+           // Section header + fix badge
+           RowLayout {
+               Layout.fillWidth: true
 
-.. code-block:: cpp
+               Text {
+                   text: "GNSS"
+                   font { pixelSize: 10; weight: Font.Bold
+                          letterSpacing: 0.9 }
+                   color: C.txt2
+               }
+               Text {
+                   text: "shared  ·  /dev/ttyUSB0"
+                   font.pixelSize: 9; color: C.txt3
+               }
+               Item { Layout.fillWidth: true }
 
-   QGroupBox* gnssGroup = new QGroupBox("GNSS / GPS");
-   QGridLayout* gnssLayout = new QGridLayout(gnssGroup);
+               // Fix quality badge
+               Rectangle {
+                   width: fixLabel.implicitWidth + 14
+                   height: 18; radius: 3
+                   color: backend.gnssValid
+                          ? "#1a3a1a" : "#3a2a0a"
+                   border.color: backend.gnssValid
+                                 ? "#2a6a2a" : "#6a4a0a"
 
-   // Port selection row
-   m_portCombo = new QComboBox();
-   for (const auto& info : QSerialPortInfo::availablePorts())
-       m_portCombo->addItem(info.portName());
+                   Row {
+                       anchors.centerIn: parent
+                       spacing: 4
+                       Rectangle {
+                           width: 5; height: 5; radius: 3
+                           color: backend.gnssValid ? C.c2t : C.amber
+                           anchors.verticalCenter: parent.verticalCenter
+                       }
+                       Text {
+                           id: fixLabel
+                           text: backend.gnssValid
+                                 ? backend.gnssFix : "No fix"
+                           font { pixelSize: 10; weight: Font.Bold
+                                  letterSpacing: 0.4 }
+                           color: backend.gnssValid ? C.c2t : C.amber
+                       }
+                   }
+               }
+           }
 
-   m_baudCombo = new QComboBox();
-   for (int baud : {4800, 9600, 19200, 38400, 57600, 115200})
-       m_baudCombo->addItem(QString::number(baud), baud);
-   m_baudCombo->setCurrentText("9600");
+           // Satellite count + HDOP row
+           Text {
+               text: backend.gnssValid
+                     ? backend.gnssSats + " sats  ·  HDOP "
+                       + backend.gnssHdop.toFixed(1)
+                     : "Waiting for fix..."
+               font { pixelSize: 10; family: C.mono }
+               color: C.txt2
+           }
 
-   m_gnssConnectBtn = new QPushButton("Connect");
+           // Coordinate grid — 2×2
+           GridLayout {
+               Layout.fillWidth: true
+               columns: 2; rowSpacing: 5; columnSpacing: 5
 
-   gnssLayout->addWidget(new QLabel("Port:"), 0, 0);
-   gnssLayout->addWidget(m_portCombo, 0, 1);
-   gnssLayout->addWidget(new QLabel("Baud:"), 0, 2);
-   gnssLayout->addWidget(m_baudCombo, 0, 3);
-   gnssLayout->addWidget(m_gnssConnectBtn, 0, 4);
+               Repeater {
+                   model: [
+                       { lbl: "LAT",
+                         val: backend.gnssLat.toFixed(6) + "°" },
+                       { lbl: "LON",
+                         val: backend.gnssLon.toFixed(6) + "°" },
+                       { lbl: "ALT",
+                         val: backend.gnssAlt.toFixed(1) + " m"  },
+                       { lbl: "SPEED",
+                         val: "0.0 kn"                           }
+                   ]
 
-   // Status indicators
-   m_gnssStatusLabel = new QLabel("Disconnected");
-   m_gnssFixLabel    = new QLabel("No fix");
-   m_gnssFixLabel->setStyleSheet("color: red; font-weight: bold;");
+                   Rectangle {
+                       Layout.fillWidth: true
+                       height: 38; radius: 5
+                       color: C.bg2
+                       border.color: C.bg3; border.width: 0.5
 
-   gnssLayout->addWidget(new QLabel("Status:"), 1, 0);
-   gnssLayout->addWidget(m_gnssStatusLabel, 1, 1, 1, 2);
-   gnssLayout->addWidget(new QLabel("Fix:"), 1, 3);
-   gnssLayout->addWidget(m_gnssFixLabel, 1, 4);
+                       Column {
+                           anchors { left: parent.left; leftMargin: 8
+                                     verticalCenter: parent.verticalCenter }
+                           spacing: 2
+                           Text {
+                               text: modelData.lbl
+                               font { pixelSize: 9; letterSpacing: 0.6 }
+                               color: C.txt2
+                           }
+                           Text {
+                               text: backend.gnssValid
+                                     ? modelData.val : "---"
+                               font { pixelSize: 12; weight: Font.DemiBold
+                                      family: C.mono }
+                               color: C.txt0
+                           }
+                       }
+                   }
+               }
+           }
 
-   // Coordinate display
-   m_latLabel  = new QLabel("---.------°");
-   m_lonLabel  = new QLabel("---.------°");
-   m_altLabel  = new QLabel("--- m");
-   m_hdopLabel = new QLabel("HDOP: --");
-   m_satLabel  = new QLabel("Sats: --");
-
-   gnssLayout->addWidget(new QLabel("Lat:"),  2, 0);
-   gnssLayout->addWidget(m_latLabel,           2, 1);
-   gnssLayout->addWidget(new QLabel("Lon:"),  2, 2);
-   gnssLayout->addWidget(m_lonLabel,           2, 3);
-   gnssLayout->addWidget(new QLabel("Alt:"),  2, 4);
-   gnssLayout->addWidget(m_altLabel,           2, 5);
-   gnssLayout->addWidget(m_hdopLabel,          3, 0, 1, 2);
-   gnssLayout->addWidget(m_satLabel,           3, 2, 1, 2);
-
-   // Geo-tag indicator
-   m_geoTagIndicator = new QLabel("⬤ No GNSS");
-   m_geoTagIndicator->setStyleSheet("color: gray;");
-   gnssLayout->addWidget(m_geoTagIndicator, 3, 4, 1, 2);
-
-   // Connect button signal
-   connect(m_gnssConnectBtn, &QPushButton::clicked,
-           this, &MainWindow::onGnssConnectClicked);
-
-GNSS Slots
------------
-
-.. code-block:: cpp
-
-   void MainWindow::onGnssConnectClicked()
-   {
-       if (!m_gnssThread)
-       {
-           m_gnssThread = new QThread(this);
-           m_nmeaReader = new NmeaReader();
-           m_nmeaReader->moveToThread(m_gnssThread);
-
-           connect(m_gnssThread,  &QThread::started,
-                   m_nmeaReader,  [this]() {
-                       m_nmeaReader->open(
-                           m_portCombo->currentText(),
-                           m_baudCombo->currentData().toInt());
-                   });
-
-           connect(m_nmeaReader,  &NmeaReader::fixUpdated,
-                   this,          &MainWindow::onGnssFixUpdated,
-                   Qt::QueuedConnection);
-
-           connect(m_nmeaReader,  &NmeaReader::statusChanged,
-                   this,          &MainWindow::onGnssStatus,
-                   Qt::QueuedConnection);
-
-           connect(m_nmeaReader,  &NmeaReader::portError,
-                   this,          &MainWindow::onGnssError,
-                   Qt::QueuedConnection);
-
-           m_gnssThread->start();
-           m_gnssConnectBtn->setText("Disconnect");
+           // UTC timestamp
+           Text {
+               text: backend.gnssValid ? backend.gnssUtc + " UTC" : ""
+               font { pixelSize: 10; family: C.mono }
+               color: C.txt2
+               visible: backend.gnssValid
+           }
        }
-       else
-       {
-           QMetaObject::invokeMethod(m_nmeaReader, "close",
-                                     Qt::QueuedConnection);
-           m_gnssThread->quit();
-           m_gnssThread->wait();
-           delete m_nmeaReader;  m_nmeaReader = nullptr;
-           delete m_gnssThread;  m_gnssThread = nullptr;
-           m_gnssConnectBtn->setText("Connect");
-           m_gnssStatusLabel->setText("Disconnected");
-           m_gnssFixLabel->setText("No fix");
-           m_gnssFixLabel->setStyleSheet("color: red; font-weight: bold;");
-           m_geoTagIndicator->setText("⬤ No GNSS");
-           m_geoTagIndicator->setStyleSheet("color: gray;");
+
+       // Bottom border
+       Rectangle {
+           anchors.bottom: parent.bottom
+           width: parent.width; height: 1; color: "#2a2d31"
        }
    }
 
-   void MainWindow::onGnssFixUpdated(std::shared_ptr<GnssRecord> rec)
-   {
-       // This slot runs on the Qt main thread (QueuedConnection)
-       if (!rec || !rec->valid) return;
+SyncPanel.qml
+--------------
 
-       m_latLabel->setText(
-           QString("%1°").arg(rec->latitude,  10, 'f', 6));
-       m_lonLabel->setText(
-           QString("%1°").arg(rec->longitude, 10, 'f', 6));
-       m_altLabel->setText(
-           QString("%1 m").arg(rec->altitude_m, 0, 'f', 1));
-       m_hdopLabel->setText(
-           QString("HDOP: %1").arg(rec->hdop, 0, 'f', 1));
-       m_satLabel->setText(
-           QString("Sats: %1").arg(rec->satellites));
+``SyncPanel`` shows the dual-camera synchronisation metrics — trigger
+mode, frame delta, timestamp delta, total bandwidth, and dropped frames.
 
-       // Colour-code fix quality
-       QString fixText;
-       QString fixStyle;
-       switch (rec->fix_quality)
-       {
-           case 0: fixText = "No fix";    fixStyle = "color: red;";    break;
-           case 1: fixText = "GPS";       fixStyle = "color: green;";  break;
-           case 2: fixText = "DGPS";      fixStyle = "color: green;";  break;
-           case 4: fixText = "RTK Fixed"; fixStyle = "color: blue;";   break;
-           case 5: fixText = "RTK Float"; fixStyle = "color: orange;"; break;
-           default:fixText = "Fix";       fixStyle = "color: green;";  break;
+.. code-block:: qml
+
+   // qml/SyncPanel.qml
+   import QtQuick 2.15
+   import QtQuick.Layouts 1.15
+   import "styles/colors.js" as C
+
+   Rectangle {
+       color: "transparent"
+
+       ColumnLayout {
+           anchors { fill: parent; margins: 10 }
+           spacing: 6
+
+           // Header + live bandwidth
+           RowLayout {
+               Layout.fillWidth: true
+               Text {
+                   text: "SYNC"
+                   font { pixelSize: 10; weight: Font.Bold
+                          letterSpacing: 0.9 }
+                   color: C.txt2
+               }
+               Item { Layout.fillWidth: true }
+               Text {
+                   text: backend.syncTotalBw.toFixed(2) + " GB/s"
+                   font { pixelSize: 10; family: C.mono }
+                   color: C.c1t
+               }
+           }
+
+           // 2×2 metrics grid
+           GridLayout {
+               Layout.fillWidth: true
+               columns: 2; rowSpacing: 5; columnSpacing: 5
+
+               Repeater {
+                   model: [
+                       {
+                           val: backend.syncDropped.toString(),
+                           lbl: "dropped",
+                           ok: backend.syncDropped === 0
+                       },
+                       {
+                           val: backend.syncDeltaMs < 1
+                                ? "<1ms"
+                                : backend.syncDeltaMs.toFixed(1) + "ms",
+                           lbl: "Δ timestamp",
+                           ok: backend.syncDeltaMs < 5
+                       },
+                       {
+                           val: "ActCmd",
+                           lbl: "trigger",
+                           ok: true
+                       },
+                       {
+                           val: "1",
+                           lbl: "Δ frames",
+                           ok: true
+                       }
+                   ]
+
+                   Rectangle {
+                       Layout.fillWidth: true
+                       height: 38; radius: 5
+                       color: C.bg2
+                       border.color: C.bg3; border.width: 0.5
+
+                       Column {
+                           anchors.centerIn: parent
+                           spacing: 1
+
+                           Text {
+                               text: modelData.val
+                               font { pixelSize: 13; weight: Font.Bold
+                                      family: C.mono }
+                               color: modelData.ok ? C.c2t : C.amber
+                               anchors.horizontalCenter: parent.horizontalCenter
+                           }
+                           Text {
+                               text: modelData.lbl
+                               font.pixelSize: 9; color: C.txt2
+                               anchors.horizontalCenter: parent.horizontalCenter
+                           }
+                       }
+                   }
+               }
+           }
        }
-       fixStyle += " font-weight: bold;";
-       m_gnssFixLabel->setText(fixText);
-       m_gnssFixLabel->setStyleSheet(fixStyle);
 
-       m_geoTagIndicator->setText("⬤ GNSS Active");
-       m_geoTagIndicator->setStyleSheet("color: green; font-weight: bold;");
+       // Bottom border
+       Rectangle {
+           anchors.bottom: parent.bottom
+           width: parent.width; height: 1; color: "#2a2d31"
+       }
    }
 
-   void MainWindow::onGnssStatus(const QString& status)
-   {
-       m_gnssStatusLabel->setText(status);
-   }
+How GNSS Data Flows
+--------------------
 
-   void MainWindow::onGnssError(const QString& error)
-   {
-       m_gnssStatusLabel->setText("Error: " + error);
-       m_gnssStatusLabel->setStyleSheet("color: red;");
-   }
+.. code-block:: text
 
-Per-Frame Geo-Tag Indicator
------------------------------
+   /dev/ttyUSB0 (GNSS receiver RS232)
+        │
+        ▼
+   NmeaReader (V3000 backend thread)
+        │  atomically updates g_currentGnss
+        ▼
+   BackendServer::buildStatusPayload()
+        │  reads g_currentGnss → JSON gnss{} object
+        │  pushed to Android every 100ms (10 Hz)
+        ▼
+   TCP :9100 → USB NCM → Android tablet
+        │
+        ▼
+   BackendClient::parseStatus()
+        │  updates m_gnssLat, m_gnssLon, etc.
+        │  emits statusUpdated()
+        ▼
+   QML property bindings
+        │  backend.gnssLat, backend.gnssValid, etc.
+        ▼
+   GnssPanel.qml re-renders automatically
 
-When the frame worker finishes processing a frame, it signals the UI.
-Update the indicator to show whether that frame was geo-tagged:
-
-.. code-block:: cpp
-
-   // Connected to frameProcessed(int index, bool wasGeoTagged) signal:
-   void MainWindow::onFrameProcessed(int index, bool geoTagged)
-   {
-       QString msg = QString("Frame %1: %2")
-           .arg(index)
-           .arg(geoTagged ? "✓ geo-tagged" : "⚠ no GNSS fix");
-       m_frameStatusLabel->setText(msg);
-   }
+No slots, no manual ``setText()`` calls, no timers in the Android UI.
+QML property bindings re-evaluate the moment ``statusUpdated()`` fires.

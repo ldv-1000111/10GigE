@@ -31,11 +31,16 @@ When **not** to use this method:
 - Multi-camera synchronisation is needed (use Option 1 instead)
 - The external computer cannot reach the V3000 on the network
 
-Part A — Qt Trigger Server (V3000 Side)
------------------------------------------
+Part A — TriggerServer (V3000 Backend)
+----------------------------------------
 
-Add a ``TriggerServer`` class to the Qt application that listens for
-incoming trigger messages:
+The ``TriggerServer`` lives in the **V3000 backend daemon**, not in the
+Android UI. It listens for UDP trigger messages from external computers
+and fires the cameras via the ``CameraWorker`` instances. It is wired
+into ``main_v3000.cpp`` alongside the ``BackendServer``.
+
+See :doc:`full_application` for the complete wiring in ``main_v3000.cpp``.
+The class implementation:
 
 .. code-block:: cpp
 
@@ -115,41 +120,35 @@ incoming trigger messages:
 Part B — Fire the Camera on Trigger Signal
 -------------------------------------------
 
-Connect ``TriggerServer::triggerReceived`` to a slot that issues
-``TriggerSoftware`` via Vimba X:
+In the two-process architecture, ``TriggerServer`` is wired to
+``CameraWorker`` inside ``main_v3000.cpp``. The trigger signal
+flows entirely within the V3000 backend — no round-trip to the
+Android tablet:
 
 .. code-block:: cpp
 
-   // In MainWindow.cpp — during camera setup:
+   // In main_v3000.cpp — wire TriggerServer to camera workers
+   // (See full listing in full_application.rst)
 
-   // 1. Configure the camera for software trigger mode
-   setEnum(m_camera, "TriggerSelector",   "FrameStart");
-   setEnum(m_camera, "TriggerSource",     "Software");
-   setEnum(m_camera, "TriggerActivation", "RisingEdge");
-   setEnum(m_camera, "TriggerMode",       "On");
-   runCmd (m_camera, "AcquisitionStart");
+   QObject::connect(trigServer, &TriggerServer::triggerReceived,
+       &app, [worker1, worker2]() {
+           worker1->softwareTrigger();
+           worker2->softwareTrigger();
+       });
 
-   // 2. Start the trigger server
-   m_triggerServer = new TriggerServer(9001, this);
-   connect(m_triggerServer, &TriggerServer::triggerReceived,
-           this,            &MainWindow::onExternalTrigger,
-           Qt::QueuedConnection);
-   m_triggerServer->start();
+Inside ``CameraWorker::softwareTrigger()``:
 
 .. code-block:: cpp
 
-   // The trigger slot — fires the camera sensor
-   void MainWindow::onExternalTrigger()
+   void CameraWorker::softwareTrigger()
    {
        if (!m_camera) return;
-
        FeaturePtr feature;
        if (VmbErrorSuccess ==
            m_camera->GetFeatureByName("TriggerSoftware", feature))
        {
            feature->RunCommand();
-           // RunCommand() is non-blocking — returns in microseconds
-           // The resulting frame arrives in FrameReceived() asynchronously
+           // Non-blocking — frame arrives in FrameReceived() asynchronously
        }
    }
 

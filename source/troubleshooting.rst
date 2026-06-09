@@ -109,3 +109,92 @@ path at runtime:
    ./build/SHR_Capture_App
 
 Add this export to ``~/.bashrc`` to make it permanent.
+
+Android App & USB NCM
+----------------------
+
+**Android app shows "Disconnected" and never connects**
+
+Check the USB NCM link first:
+
+.. code-block:: bash
+
+   # On V3000
+   ip addr show usb0
+   # Must show inet 192.168.100.1/24
+
+   ping 192.168.100.2 -c 3
+   # Android tablet must respond
+
+If ``usb0`` is missing, the USB gadget service failed:
+
+.. code-block:: bash
+
+   sudo systemctl status usb-gadget
+   journalctl -u usb-gadget -n 30
+
+If the interface is up but Android doesn't respond, check that
+Android has assigned ``192.168.100.2`` on the USB interface:
+
+.. code-block:: bash
+
+   adb shell ip addr show usb0
+
+On some Android versions the USB network mode must be manually set:
+**Settings → Network → USB → USB tethering**.
+
+**BackendServer not running**
+
+.. code-block:: bash
+
+   sudo systemctl status shr-backend
+   journalctl -u shr-backend -n 50
+
+   # Test TCP port from V3000
+   nc -zv 192.168.100.1 9100
+
+**APK install fails**
+
+.. code-block:: bash
+
+   # Check ADB can see the tablet
+   adb devices
+
+   # If not listed, enable Developer Options on the tablet:
+   # Settings → About → tap Build number 7 times
+   # Settings → Developer options → USB debugging ON
+
+   # If install rejected (version conflict)
+   adb uninstall com.shrproject.cameracontrol
+   adb install SHR_Camera_Android.apk
+
+**QML UI is slow or janky on the tablet**
+
+- Ensure **Hardware acceleration** is enabled:
+  ``AndroidManifest.xml`` must have
+  ``android:hardwareAccelerated="true"`` on the ``<application>`` tag
+- Check the tablet meets Android 13+ requirement
+- Reduce ``FrameLog`` model size from 200 to 50 entries in
+  ``FrameLog.qml`` if the log is visibly causing frame drops
+
+**Android screen goes black during acquisition**
+
+The ``WAKE_LOCK`` permission in ``AndroidManifest.xml`` prevents
+sleep, but some Android OEMs ignore it for USB-connected devices.
+Add this in ``main_android.cpp``:
+
+.. code-block:: cpp
+
+   // Keep screen on while app is running
+   // Call after QGuiApplication is created
+   #if defined(Q_OS_ANDROID)
+   #include <QJniObject>
+   QJniObject::callStaticMethod<void>(
+       "org/qtproject/qt/android/QtNative",
+       "setContext",
+       "(Landroid/content/Context;)V",
+       QNativeInterface::QAndroidApplication::context());
+   #endif
+
+Or set in ``AndroidManifest.xml`` activity:
+``android:keepScreenOn="true"``

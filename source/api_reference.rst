@@ -200,3 +200,124 @@ Error Codes
      - ``VmbSystem::Startup()`` not called
    * - ``VmbErrorInvalidAccess``
      - Camera not open or wrong access mode
+
+----
+
+BackendClient — Android QML Properties
+----------------------------------------
+
+All properties are exposed via ``Q_PROPERTY`` and notify ``statusUpdated()``.
+In QML, access them as ``backend.propertyName`` — bindings update automatically.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 15 55
+
+   * - Property
+     - Type
+     - Description
+   * - ``cam1Frames``
+     - int
+     - Total frames captured by Camera 1
+   * - ``cam1Fps``
+     - double
+     - Current frame rate, Camera 1
+   * - ``cam1Written``
+     - double
+     - GB written to NVMe, Camera 1
+   * - ``cam1Bw``
+     - double
+     - Current 10GbE bandwidth GB/s, Camera 1
+   * - ``cam1Dropped``
+     - int
+     - Dropped frames, Camera 1 (0 = healthy)
+   * - ``cam1BufFree``
+     - int
+     - Free Vimba X frame buffers, Camera 1
+   * - ``cam1GeoTag``
+     - bool
+     - Last frame was geo-tagged
+   * - ``cam2*``
+     - —
+     - Same set for Camera 2
+   * - ``gnssValid``
+     - bool
+     - GNSS fix is active
+   * - ``gnssFix``
+     - QString
+     - Fix description e.g. "GPS 3D"
+   * - ``gnssLat``
+     - double
+     - Latitude, decimal degrees
+   * - ``gnssLon``
+     - double
+     - Longitude, decimal degrees
+   * - ``gnssAlt``
+     - double
+     - Altitude above MSL, metres
+   * - ``gnssSats``
+     - int
+     - Satellites in use
+   * - ``gnssHdop``
+     - double
+     - Horizontal dilution of precision
+   * - ``gnssUtc``
+     - QString
+     - UTC time string from GNSS receiver
+   * - ``syncDeltaMs``
+     - double
+     - Timestamp delta between cam1 and cam2, ms
+   * - ``syncTotalBw``
+     - double
+     - Combined bandwidth both cameras, GB/s
+   * - ``syncDropped``
+     - int
+     - Total dropped frames across both cameras
+   * - ``connected``
+     - bool
+     - TCP connection to V3000 is active
+
+BackendClient — Invokable Methods
+-----------------------------------
+
+Called from QML as ``backend.methodName()``:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 60
+
+   * - Method
+     - Action
+   * - ``connectToV3000(host, port)``
+     - Connect to V3000 backend. Default: 192.168.100.1:9100
+   * - ``disconnect()``
+     - Disconnect from V3000
+   * - ``triggerBoth()``
+     - Send trigger command for both cameras
+   * - ``triggerCam1()``
+     - Send trigger command for Camera 1 only
+   * - ``triggerCam2()``
+     - Send trigger command for Camera 2 only
+   * - ``startAll()``
+     - Start acquisition on both cameras
+   * - ``stopAll()``
+     - Stop acquisition on both cameras
+   * - ``setExposure(int us)``
+     - Set exposure time in microseconds
+   * - ``setPixelFormat(QString fmt)``
+     - Set pixel format e.g. "BayerGR12"
+   * - ``setOutputDir(QString dir)``
+     - Set frame output directory on V3000
+
+TCP Protocol Reference
+-----------------------
+
+All messages are newline-delimited JSON on TCP port 9100.
+
+**V3000 → Android (10 Hz):** ``{ "type": "status", "cam1": {...}, "cam2": {...}, "gnss": {...}, "sync": {...} }``
+
+**V3000 → Android (per frame):** ``{ "type": "frame", "cam": 1, "index": 1284, "geo_tagged": true, "process_ms": 163, "ts": "14:23:11.861" }``
+
+**Android → V3000:** ``{ "type": "trigger"|"start"|"stop"|"set", ... }``
+
+See :doc:`arch_overview` for the complete message format.

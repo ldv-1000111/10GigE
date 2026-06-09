@@ -117,23 +117,33 @@ delayed and the next incoming frame may find no free buffer — causing drops.
 If they run on the Qt main thread, the UI freezes and trigger buttons become
 unresponsive.
 
-Thread Pinning on the V3000
------------------------------
+Thread Layout on the V3000
+---------------------------
 
-The Bedrock V3000's 8-core Zen3+ CPU provides enough cores to assign
-exclusive cores to each layer:
+In the two-process architecture, the V3000 runs **no Qt UI** — the
+``QCoreApplication`` backend daemon uses all 8 cores exclusively for
+acquisition, processing, and the TCP server. There is no Qt rendering
+competing for CPU time.
 
 .. code-block:: text
 
-   Core 0–1:  Vimba X acquisition thread (real-time, SCHED_FIFO)
-   Core 2–3:  Frame worker thread (high priority)
-   Core 4–5:  NVMe write thread
-   Core 6–7:  Qt main thread + OS
+   V3000 — SHR_Backend (QCoreApplication, headless)
+   ──────────────────────────────────────────────────
+   Core 0–1:  Vimba X Camera 1 acquisition (SCHED_FIFO, real-time)
+   Core 2–3:  Vimba X Camera 2 acquisition (SCHED_FIFO, real-time)
+   Core 4–5:  Frame worker + NVMe write threads
+   Core 6:    GNSS NmeaReader + BackendServer TCP
+   Core 7:    OS + systemd + idle
 
-This is configured via the real-time scheduling settings in
-:doc:`system_settings` and optionally via ``pthread_setaffinity_np()``
-in the application startup code.
+   Android tablet — SHR_Camera_Android (QGuiApplication)
+   ───────────────────────────────────────────────────────
+   All cores:  Qt Quick scene graph + BackendClient TCP
+               (standard Android scheduler, no real-time needed)
 
-With this layout, the 10 GbE receive path (cores 0–1) is never preempted
-by Qt rendering or disk I/O, and the UI (cores 6–7) remains responsive
-at all times regardless of frame rate or image size.
+This is the key advantage of the two-process split: the V3000 CPU is
+100% dedicated to the acquisition pipeline. Qt rendering — which can
+cause millisecond-scale jitter — runs on a completely separate device.
+
+Core pinning on the V3000 is configured via the real-time scheduling
+settings in :doc:`system_settings` and the ``LimitRTPRIO=99`` directive
+in the ``shr-backend.service`` systemd unit (see :doc:`full_application`).

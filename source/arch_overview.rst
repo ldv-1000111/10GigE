@@ -183,3 +183,40 @@ Part IV is divided into two sub-parts reflecting the two processes:
      - Qt for Android build setup, QML UI structure, BackendClient,
        QML components (CameraPanel, SectionWidget, TriggerBar,
        GnssPanel), stylesheet, build and deploy
+
+
+Thumbnail Streaming — Phase 2
+-------------------------------
+
+The current TCP protocol carries only **metadata** (frame counts, fps,
+GNSS, bandwidth). The ``CameraPanel.qml`` preview shows a placeholder.
+Thumbnail streaming is a planned Phase 2 feature.
+
+When implemented, the V3000 backend will:
+
+1. Downsample the debayered RGB8 frame to 1920×1080 after processing
+2. JPEG-encode it (``libturbojpeg``, ~200–400 KB per thumbnail)
+3. Send it as a binary frame alongside the JSON status message
+
+The protocol extension:
+
+.. code-block:: text
+
+   # Header message (JSON):
+   {"type":"thumb","cam":1,"index":1284,"width":1920,"height":1080,"jpeg_bytes":287432}
+
+   # Immediately followed by 287432 bytes of raw JPEG data on the TCP stream
+
+On the Android side, ``CameraPanel.qml`` replaces the placeholder
+``Rectangle`` with an ``Image`` element sourced from a
+``QQuickImageProvider`` backed by the decoded JPEG.
+
+At 10 fps and ~300 KB per thumbnail, this adds ~3 MB/s per camera
+(~6 MB/s total) to the USB NCM link — well within USB 2.0 NCM capacity
+of ~400 Mbps (50 MB/s).
+
+.. note::
+   Thumbnail streaming is explicitly **not** in scope for the current
+   implementation. The acquisition pipeline runs correctly at full
+   resolution and frame rate without it. Add it once the core pipeline
+   is stable and tested on hardware.

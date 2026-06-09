@@ -1,0 +1,22 @@
+[Unit]
+Description=SHR Camera Acquisition Backend
+After=network.target usb-gadget.service
+Wants=usb-gadget.service
+
+[Service]
+Type=simple
+User=luis
+WorkingDirectory=/home/luis/shr
+ExecStart=/home/luis/shr/SHR_Backend --simulator --gnss-port /dev/ttyUSB0 --output /home/luis/frames
+Restart=on-failure
+RestartSec=3s
+Environment="LD_LIBRARY_PATH=/home/luis/vimba_libs"
+Environment="GENICAM_GENTL64_PATH=/home/luis/vimba_libs"
+LimitRTPRIO=99
+LimitMEMLOCK=infinity
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=shr-backend
+
+[Install]
+WantedBy=multi-user.target

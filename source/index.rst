@@ -51,7 +51,15 @@ Ultra-High-Resolution Machine Vision with Geolocation on Linux
 
 .. toctree::
    :maxdepth: 2
-   :caption: Part IV — Building the Application
+   :caption: Part IV — Application Architecture
+
+   arch_overview
+   arch_usb_network
+   arch_backend_server
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Part IV-A — V3000 Backend (C++)
 
    camera_discovery
    feature_configuration
@@ -62,7 +70,16 @@ Ultra-High-Resolution Machine Vision with Geolocation on Linux
    trigger_action_commands
    trigger_hardware_ttl
    trigger_software_qt
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Part IV-B — Android Frontend (Qt QML)
+
+   android_setup
+   android_backend_client
+   android_qml_ui
    qt_ui_layout
+   qt_stylesheet
 
 .. toctree::
    :maxdepth: 2

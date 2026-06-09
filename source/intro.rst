@@ -175,11 +175,13 @@ Document Structure
        scheduling, NVMe), Vimba X installation, development on a
        generic x86 machine using the Camera Simulator, Qt project setup.
    * - **IV**
-     - Building the Application
-     - Camera discovery, feature configuration, asynchronous
-       acquisition pipeline, image transformation, saving frames.
-       External trigger methods: Action Commands (UDP/Ethernet),
-       TTL-24V hardware line, and software trigger via Qt.
+     - Application Architecture
+     - Two-process architecture: V3000 headless C++ backend +
+       Android Qt QML frontend over USB NCM. Sub-parts:
+       IV-A covers the V3000 backend (camera, acquisition,
+       triggers, backend TCP server); IV-B covers the Android
+       app (Qt QML UI, BackendClient, QML components, build
+       and deploy).
    * - **V**
      - Complete Application
      - Full annotated C++ source listing, CMakeLists.txt, build

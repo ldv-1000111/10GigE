@@ -1,10 +1,20 @@
 Qt's Role in the Acquisition Architecture
 ==========================================
 
-In an SHR 10GigE capture system, Qt is not the data pipeline — it is the
-**control and monitoring layer** that sits above it. Understanding this
-distinction is essential for designing an application that stays responsive
-while Vimba X saturates the 10 GbE link.
+The application is split across two processes: a **headless C++ backend**
+on the V3000 that owns the entire data pipeline, and a **Qt QML frontend**
+on the Android tablet that owns the entire user interface. Qt plays a
+different role in each process.
+
+On the **V3000**, Qt provides ``QCoreApplication``, ``QTcpServer``,
+``QTimer``, and ``QThread`` — infrastructure only. There is no UI.
+
+On the **Android tablet**, Qt provides the full QML touch UI — camera
+previews, trigger controls, GNSS display, collapsible settings panels.
+There is no Vimba X.
+
+Understanding this separation is essential for designing an application
+that stays responsive while Vimba X saturates the 10 GbE link.
 
 Architecture Overview
 ----------------------

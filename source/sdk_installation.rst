@@ -1,99 +1,159 @@
-SDK Installation
-================
-
-Vimba X is Allied Vision's current-generation SDK. It is fully GenICam-compliant
-and supports SHR cameras (via the SVS-Vistek GigE transport layer) out of the box.
-
-.. warning::
-   Do **not** use the legacy Vimba SDK for new projects. Vimba X is the
-   required SDK for all current development.
+SDK Installation — Vimba X 2026-1
+===================================
 
 Download
+---------
+
+Go to the Allied Vision download page (free account required):
+
+https://www.alliedvision.com/en/support/software-downloads/
+
+Download **Vimba X 2026-1** for Linux x86_64. The archive is named:
+
+.. code-block:: text
+
+   VimbaX_Setup-2026-1-Linux64.tar.gz
+
+Extract
 --------
-
-Download **Vimba X 2026-1** from:
-
-https://www.alliedvision.com/en/support/software-downloads/vimba-x-sdk/vimba-x
-
-Online developer documentation is also available at:
-
-https://docs.alliedvision.com/Vimba_X/
-
-Select the Linux x86_64 package (``VimbaX_2026-1_Linux_x86_64.tar.gz``).
-
-Install
--------
 
 .. code-block:: bash
 
-   # Extract the archive
-   tar -xzf VimbaX_2026-1_Linux_x86_64.tar.gz -C ~/
+   cd ~
+   tar -xf ~/Downloads/VimbaX_Setup-2026-1-Linux64.tar.gz
 
-   # The SDK is now at ~/VimbaX_2026-1/
-   ls ~/VimbaX_2026-1/
+This creates ``~/VimbaX_2026-1/``. The structure relevant to C++ development:
 
-Directory structure::
+.. code-block:: text
 
-   VimbaX_2026-1/
+   ~/VimbaX_2026-1/
+   │
    ├── api/
-   │   ├── include/         ← Headers: VmbCPP/, VmbC/, VmbImageTransform/
-   │   ├── lib/x86_64/      ← Shared libraries: libVmbCPP.so, libVmbImageTransform.so
-   │   └── examples/        ← Example projects (VmbC/, VmbCPP/)
+   │   ├── include/
+   │   │   ├── VmbCPP/          ← C++ API headers  (VmbCPP.h, Camera.h, Frame.h ...)
+   │   │   ├── VmbC/            ← C API headers
+   │   │   └── VmbImageTransform/  ← Image Transform headers (VmbTransform.h)
+   │   │
+   │   ├── lib/
+   │   │   ├── libVmbCPP.so        ← C++ API library       (link in CMake)
+   │   │   ├── libVmbC.so          ← C API library
+   │   │   ├── libVmbImageTransform.so  ← Image Transform library
+   │   │   ├── VmbC.xml            ← Transport layer configuration
+   │   │   └── GenICam/            ← GenICam runtime (loaded automatically)
+   │   │
+   │   ├── examples/
+   │   │   └── VmbCPP/          ← C++ examples (AsynchronousGrab, ChunkAccess ...)
+   │   │
+   │   └── source/VmbCPP/       ← C++ API source (rebuild for newer compilers)
+   │
    ├── bin/
-   │   ├── VmbC.xml         ← Transport layer configuration
-   │   └── VimbaX_Viewer    ← GUI viewer for testing cameras
-   └── cti/
-       ├── VimbaGigETL.cti          ← GigE Vision transport layer
-       ├── VimbaGigETL_Install.sh   ← GigE TL installer
-       └── VimbaUSBTL_Install.sh    ← USB TL installer (not needed here)
+   │   └── VimbaXViewer         ← GUI camera viewer and feature explorer
+   │
+   ├── cti/
+   │   ├── Install_GenTL_Path.sh    ← run this to register transport layers
+   │   ├── Uninstall_GenTL_Path.sh
+   │   ├── VimbaGigETL.cti          ← GigE Vision transport layer
+   │   ├── VimbaUSBTL.cti           ← USB3 Vision transport layer
+   │   └── VimbaCameraSimulatorTL.cti  ← Camera Simulator (no hardware needed)
+   │
+   └── doc/
+       └── VimbaX_Documentation/
+           ├── cppAPIManual.html    ← C++ API reference
+           ├── imagetransformManual.html
+           └── sdkManual.html
 
-Install the GigE Transport Layer
-----------------------------------
+Install the GenTL Transport Layer
+-----------------------------------
 
-The transport layer (TL) is a kernel-level driver that handles the GigE Vision
-protocol. It must be installed before any camera will be detected.
+This registers the transport layers with the system so cameras
+can be discovered:
 
 .. code-block:: bash
 
    cd ~/VimbaX_2026-1/cti/
-   sudo ./VimbaGigETL_Install.sh
+   sudo ./Install_GenTL_Path.sh
 
-This registers the GigE TL with the system and sets the ``GENICAM_GENTL64_PATH``
-environment variable.
-
-Verify installation:
+Reboot
+-------
 
 .. code-block:: bash
 
-   echo $GENICAM_GENTL64_PATH
-   # Should print the path to the cti directory
+   sudo reboot
 
-Verify Camera Detection with Vimba X Viewer
---------------------------------------------
+The reboot is required — the GenTL registration does not take
+effect until after a restart.
 
-Before writing any code, confirm the camera is detected:
+Set Environment Variables
+--------------------------
 
-.. code-block:: bash
-
-   cd ~/VimbaX_2026-1/bin/
-   ./VimbaX_Viewer
-
-If the SHR camera appears in the camera list, your hardware and transport
-layer are working correctly. If it does not appear, revisit
-:doc:`hardware_setup` and :doc:`system_settings`.
-
-.. tip::
-   In Vimba X Viewer you can explore all camera features, set the pixel format,
-   and trigger test captures before writing any code. This is the fastest way
-   to validate the hardware setup.
-
-Environment Variables
-----------------------
-
-Add the Vimba X libraries to your library path so your application can find
-them at runtime:
+After rebooting, add to ``~/.bashrc``:
 
 .. code-block:: bash
 
-   echo 'export LD_LIBRARY_PATH=~/VimbaX_2026-1/api/lib/x86_64:$LD_LIBRARY_PATH' >> ~/.bashrc
+   # Vimba X 2026-1
+   export VIMBAX_DIR=~/VimbaX_2026-1
+   export LD_LIBRARY_PATH=${VIMBAX_DIR}/api/lib:${LD_LIBRARY_PATH:-}
+   export GENICAM_GENTL64_PATH=${VIMBAX_DIR}/cti
+
+Activate:
+
+.. code-block:: bash
+
    source ~/.bashrc
+
+Verify Installation
+--------------------
+
+Check the key files are present:
+
+.. code-block:: bash
+
+   ls $VIMBAX_DIR/api/include/VmbCPP/VmbCPP.h
+   ls $VIMBAX_DIR/api/lib/libVmbCPP.so
+   ls $VIMBAX_DIR/api/lib/libVmbImageTransform.so
+   ls $VIMBAX_DIR/cti/VimbaCameraSimulatorTL.cti
+
+Launch the Viewer to confirm the Camera Simulator is working:
+
+.. code-block:: bash
+
+   $VIMBAX_DIR/bin/VimbaXViewer
+
+A simulated camera should appear in the camera list on the left.
+If it does not appear, verify ``GENICAM_GENTL64_PATH`` is set
+correctly and contains ``VimbaCameraSimulatorTL.cti``.
+
+.. note::
+   The Vimba X Viewer is named ``VimbaXViewer`` (no space, no
+   underscore) in the actual installation — not ``VimbaX_Viewer``
+   as shown in some Allied Vision documentation.
+
+What We Use for C++
+--------------------
+
+For building ``SHR_Backend``, CMakeLists.txt references:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 45 55
+
+   * - File
+     - Purpose
+   * - ``api/include/VmbCPP/VmbCPP.h``
+     - Main C++ API header
+   * - ``api/include/VmbImageTransform/VmbTransform.h``
+     - Image Transform header
+   * - ``api/lib/libVmbCPP.so``
+     - C++ API shared library
+   * - ``api/lib/libVmbImageTransform.so``
+     - Image Transform shared library
+   * - ``api/lib/VmbC.xml``
+     - Transport layer config (deployed with binary)
+   * - ``cti/VimbaCameraSimulatorTL.cti``
+     - Camera Simulator (deployed with binary)
+   * - ``cti/VimbaGigETL.cti``
+     - GigE Vision TL (deployed with binary for real cameras)
+
+The ``doc/`` folder contains the full offline HTML documentation —
+open ``doc/VimbaX_Documentation/index.html`` in a browser for the
+complete API reference.

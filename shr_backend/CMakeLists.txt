@@ -30,8 +30,8 @@ include_directories(
     "${CMAKE_CURRENT_SOURCE_DIR}"   # module headers: camera/, gnss/, etc.
 )
 
-set(VMB_CPP "${VIMBAX_API}/lib/x86_64/libVmbCPP.so")
-set(VMB_IMG "${VIMBAX_API}/lib/x86_64/libVmbImageTransform.so")
+set(VMB_CPP "${VIMBAX_API}/lib/libVmbCPP.so")
+set(VMB_IMG "${VIMBAX_API}/lib/libVmbImageTransform.so")
 
 # ── Sources ─────────────────────────────────────────────────
 add_executable(SHR_Backend

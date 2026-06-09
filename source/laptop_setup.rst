@@ -82,7 +82,7 @@ in a text editor and add these lines at the bottom:
 
    # Vimba X 2026-1
    export VIMBAX_DIR=~/VimbaX_2026-1
-   export LD_LIBRARY_PATH=${VIMBAX_DIR}/api/lib/x86_64:${LD_LIBRARY_PATH:-}
+   export LD_LIBRARY_PATH=${VIMBAX_DIR}/api/lib:${LD_LIBRARY_PATH:-}
    export GENICAM_GENTL64_PATH=${VIMBAX_DIR}/cti
 
 Then activate:
@@ -109,7 +109,7 @@ Simulator is available:
 
 .. code-block:: bash
 
-   $VIMBAX_DIR/bin/VimbaX_Viewer
+   $VIMBAX_DIR/bin/VimbaXViewer
 
 The Viewer should open. In the camera list on the left, you should see
 a simulated camera — something like ``DEV_SimulatedCamera_...``.

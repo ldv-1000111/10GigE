@@ -105,7 +105,7 @@ Verify it appears in Vimba X Viewer:
 
 .. code-block:: bash
 
-   ~/VimbaX_2026-1/bin/VimbaX_Viewer
+   ~/VimbaX_2026-1/bin/VimbaXViewer
 
 A simulated camera named ``DEV_SimulatedCamera_...`` should appear in
 the camera list. If it does not, check that the Camera Simulator TL

@@ -16,7 +16,7 @@
 set -euo pipefail
 
 NUC_HOST="192.168.1.50"
-NUC_USER="${NUC_USER:-luis}"
+NUC_USER="${NUC_USER:-lvs}"
 NUC_TARGET="${NUC_USER}@${NUC_HOST}"
 DEPLOY_DIR="/home/${NUC_USER}/shr"
 VIMBA_LIB_DIR="/home/${NUC_USER}/vimba_libs"

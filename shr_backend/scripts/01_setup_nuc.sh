@@ -4,7 +4,7 @@
 #  Initial NUC setup — run ONCE from the laptop via SSH
 #
 #  Usage:
-#    ssh luis@192.168.1.50 "bash -s" < scripts/01_setup_nuc.sh
+#    ssh lvs@192.168.1.50 "bash -s" < scripts/01_setup_nuc.sh
 #
 #  What it does:
 #    - Assigns static IP 192.168.1.50 (confirms it's already set)

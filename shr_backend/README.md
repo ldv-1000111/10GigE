@@ -10,7 +10,7 @@ bash scripts/00_install_vimba.sh
 source ~/.bashrc
 
 # 2. Setup the NUC (run once)
-ssh luis@192.168.1.50 "bash -s" < scripts/01_setup_nuc.sh
+ssh lvs@192.168.1.50 "bash -s" < scripts/01_setup_nuc.sh
 
 # 3. Build on the laptop
 bash scripts/02_build.sh Release
@@ -19,7 +19,7 @@ bash scripts/02_build.sh Release
 bash scripts/03_deploy.sh
 
 # 5. Run on NUC manually (first time)
-ssh luis@192.168.1.50
+ssh lvs@192.168.1.50
 cd ~/shr
 LD_LIBRARY_PATH=~/vimba_libs GENICAM_GENTL64_PATH=~/vimba_libs \
   ./SHR_Backend --simulator --gnss-port /tmp/ttyGNSS
@@ -59,7 +59,7 @@ echo '{"type":"start"}' | nc 192.168.1.50 9100
 ## Deploy as systemd service (after Stage 1 passes)
 
 ```bash
-ssh luis@192.168.1.50
+ssh lvs@192.168.1.50
 sudo cp ~/shr/systemd/shr-backend.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now shr-backend

@@ -7,7 +7,7 @@
 # ============================================================
 set -euo pipefail
 MODE="${1:-local}"; TCP_PORT="${2:-5555}"
-NUC_HOST="192.168.1.50"; NUC_USER="${NUC_USER:-luis}"
+NUC_HOST="192.168.1.50"; NUC_USER="${NUC_USER:-lvs}"
 LAPTOP_IP=$(ip route get 8.8.8.8 2>/dev/null | grep -oP 'src \K\S+' || echo "192.168.1.x")
 
 generate_nmea() {

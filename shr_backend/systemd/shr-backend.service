@@ -5,13 +5,13 @@ Wants=usb-gadget.service
 
 [Service]
 Type=simple
-User=luis
-WorkingDirectory=/home/luis/shr
-ExecStart=/home/luis/shr/SHR_Backend --simulator --gnss-port /dev/ttyUSB0 --output /home/luis/frames
+User=lvs
+WorkingDirectory=/home/lvs/shr
+ExecStart=/home/lvs/shr/SHR_Backend --simulator --gnss-port /dev/ttyUSB0 --output /home/lvs/frames
 Restart=on-failure
 RestartSec=3s
-Environment="LD_LIBRARY_PATH=/home/luis/vimba_libs"
-Environment="GENICAM_GENTL64_PATH=/home/luis/vimba_libs"
+Environment="LD_LIBRARY_PATH=/home/lvs/vimba_libs"
+Environment="GENICAM_GENTL64_PATH=/home/lvs/vimba_libs"
 LimitRTPRIO=99
 LimitMEMLOCK=infinity
 StandardOutput=journal

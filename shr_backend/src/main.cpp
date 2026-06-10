@@ -149,11 +149,15 @@ int main(int argc, char* argv[])
     auto wireWorker = [&](CameraWorker* w, int idx) {
         if (!w) return;
         QObject::connect(w, &CameraWorker::metricsUpdated,
-            &app, [=](double fps, qint64 written, int bufFree, double bw) {
+            &app, [=](int frames, double fps,
+                      qint64 written, int bufFree, double bw) {
                 BackendServer::CameraStatus s;
-                s.camIndex = idx; s.fps = fps;
+                s.camIndex   = idx;
+                s.frames     = frames;
+                s.fps        = fps;
                 s.written_gb = written / 1e9;
-                s.bw_gbs = bw; s.buf_free = bufFree;
+                s.bw_gbs     = bw;
+                s.buf_free   = bufFree;
                 backend->updateCameraStatus(idx, s);
             });
         QObject::connect(w, &CameraWorker::frameReady,

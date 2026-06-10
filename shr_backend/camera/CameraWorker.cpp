@@ -231,5 +231,6 @@ void CameraWorker::emitMetrics()
     double bw   = secs > 0
                   ? (m_bytesWritten.load() / secs) / 1e9
                   : 0.0;
-    emit metricsUpdated(fps, m_bytesWritten.load(), BUFFER_COUNT, bw);
+    emit metricsUpdated(m_frameCount.load(), fps,
+                       m_bytesWritten.load(), BUFFER_COUNT, bw);
 }

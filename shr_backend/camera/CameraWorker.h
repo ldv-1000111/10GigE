@@ -37,8 +37,9 @@ public slots:
 signals:
     void frameReady(int frameIndex, bool geoTagged,
                     int processMs, const QString& ts);
-    void metricsUpdated(double fps, qint64 bytesWritten,
-                        int buffersFree, double bwGBs);
+    void metricsUpdated(int frameCount, double fps,
+                        qint64 bytesWritten, int buffersFree,
+                        double bwGBs);
     void errorOccurred(const QString& msg);
     void statusChanged(const QString& msg);
 

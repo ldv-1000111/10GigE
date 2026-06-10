@@ -34,8 +34,11 @@ do not have one:
 
 https://www.alliedvision.com/en/support/software-downloads/
 
-Download **Vimba X 2026-1** for **Linux x86_64**. The archive will be
-named something like ``VimbaX_Setup-2026-1-Linux64.tar.gz``.
+Download **Vimba X 2026-1** for **Linux x86_64**. The archive is named:
+
+.. code-block:: text
+
+   VimbaX_Setup-2026-1-Linux64.tar.gz
 
 Step 3 — Extract the Archive
 ------------------------------
@@ -50,13 +53,13 @@ This extracts to ``~/VimbaX_2026-1/``. Verify:
 .. code-block:: bash
 
    ls ~/VimbaX_2026-1/
-   # Should show: api/  bin/  cti/  README.txt  ...
+   # Should show: api/  bin/  cti/  doc/  README.txt
 
 Step 4 — Install the GenTL Path
 ---------------------------------
 
 This is the official Vimba X registration step. It registers the
-transport layer with the system so cameras can be discovered:
+transport layers with the system so cameras can be discovered:
 
 .. code-block:: bash
 
@@ -104,30 +107,24 @@ Verify the variables are set:
 Step 7 — Verify with Vimba X Viewer
 -------------------------------------
 
-Launch the Viewer to confirm the SDK is working and the Camera
-Simulator is available:
+Launch the Viewer to confirm the SDK is working:
 
 .. code-block:: bash
 
    $VIMBAX_DIR/bin/VimbaXViewer
 
-The Viewer should open. In the camera list on the left, you should see
-a simulated camera — something like ``DEV_SimulatedCamera_...``.
-
-.. note::
-   If no simulated camera appears, verify that
-   ``$VIMBAX_DIR/cti/VimbaCameraSimulatorTL.cti`` exists and that
-   ``GENICAM_GENTL64_PATH`` is set correctly.
-
-This is **Checkpoint 1** — do not proceed to the build until the
-Viewer shows the simulated camera.
+The Viewer should open and show the Camera Simulator TL with a few
+default Alvium simulated cameras. This confirms the SDK and GenTL
+registration are working correctly.
 
 Step 8 — Add SHR Camera Simulator Presets
 -------------------------------------------
 
 By default the Camera Simulator only shows small Alvium-class cameras.
-To simulate the SHR resolutions, add the SHR presets to
-``VimbaCameraSimulatorTLPresets.json``.
+To simulate SHR resolutions, two files need to be edited inside
+``~/VimbaX_2026-1/cti/``.
+
+**Part 1 — Add SHR models to VimbaCameraSimulatorTLPresets.json**
 
 Open the file:
 
@@ -135,28 +132,29 @@ Open the file:
 
    nano ~/VimbaX_2026-1/cti/VimbaCameraSimulatorTLPresets.json
 
-The file contains a single ``"presets"`` object. Add the two SHR entries
-**inside** that object, after the last existing entry (``G5-2460c``).
-Add a comma after the closing ``}`` of ``G5-2460c`` then append:
+The file contains a single ``"presets"`` object with named camera
+entries. Add the two SHR entries **inside** that object, after the
+last existing entry (``G5-2460c``). Add a comma after the closing
+``}`` of ``G5-2460c`` and append:
 
 .. code-block:: json
 
-   "SHR-sim-101MP": {
-       "width": 11648,
-       "height": 8742,
-       "link_speed": 1250000000,
-       "throughput_limit": 1100000000,
-       "sensor": "color"
-   },
-   "SHR-sim-151MP": {
-       "width": 14192,
-       "height": 10640,
-       "link_speed": 1250000000,
-       "throughput_limit": 1100000000,
-       "sensor": "color"
-   }
+       "SHR-sim-101MP": {
+           "width": 11648,
+           "height": 8742,
+           "link_speed": 1250000000,
+           "throughput_limit": 1100000000,
+           "sensor": "color"
+       },
+       "SHR-sim-151MP": {
+           "width": 14192,
+           "height": 10640,
+           "link_speed": 1250000000,
+           "throughput_limit": 1100000000,
+           "sensor": "color"
+       }
 
-The end of the file should look like this:
+The end of the file should now look like:
 
 .. code-block:: json
 
@@ -185,31 +183,51 @@ The end of the file should look like this:
    }
 
 .. note::
-   The format used by this file is different from what the Vimba X
-   documentation examples show. Entries use ``"sensor"`` (``"color"``
-   or ``"mono"``), ``"link_speed"``, and ``"throughput_limit"`` —
-   not ``"pixel_format"`` or ``"frame_rate"``. The key name is the
-   camera model name. There is no ``"name"`` field.
+   The format used by this file is different from the Vimba X
+   documentation examples. Entries use ``"sensor"`` (``"color"`` or
+   ``"mono"``), ``"link_speed"``, and ``"throughput_limit"`` — not
+   ``"pixel_format"`` or ``"frame_rate"``. The key name is the camera
+   model name. There is no ``"name"`` field.
 
-Verify the JSON is valid before restarting the Viewer:
+**Part 2 — Select SHR cameras in VimbaCameraSimulatorTL.xml**
+
+Adding presets to the JSON only registers the model — the XML file
+controls which cameras are actually instantiated. Open it:
 
 .. code-block:: bash
 
-   python3 -c "
-   import json
-   with open('/home/lvs/VimbaX_2026-1/cti/VimbaCameraSimulatorTLPresets.json') as f:
-       d = json.load(f)
-   print('Valid —', len(d['presets']), 'presets')
-   print('SHR entries:', [k for k in d['presets'] if 'SHR' in k])
-   "
+   nano ~/VimbaX_2026-1/cti/VimbaCameraSimulatorTL.xml
 
-Restart the Viewer:
+Find the ``<Cameras>`` section and replace its entire contents with:
+
+.. code-block:: xml
+
+   <Cameras>
+       <Camera name="SHR-101MP" preset="SHR-sim-101MP"/>
+       <Camera name="SHR-151MP" preset="SHR-sim-151MP"/>
+   </Cameras>
+
+Save the file and restart the Viewer:
 
 .. code-block:: bash
 
    $VIMBAX_DIR/bin/VimbaXViewer
 
-The SHR cameras should now appear in the simulated camera list.
+The two SHR simulated cameras should now appear in the camera list
+under **Camera Simulator TL → Camera Simulator Interface**.
+
+.. note::
+   Vimba X uninstall deletes ``VimbaCameraSimulatorTL.xml``. Save a
+   copy outside the install directory to preserve your settings across
+   SDK updates:
+
+   .. code-block:: bash
+
+      cp ~/VimbaX_2026-1/cti/VimbaCameraSimulatorTL.xml \
+         ~/VimbaCameraSimulatorTL.xml.backup
+
+This is **Checkpoint 1** — do not proceed to the build until both
+SHR cameras appear in the Viewer.
 
 Step 9 — Set Up SSH Key for NUC
 ---------------------------------
@@ -227,8 +245,8 @@ Passwordless SSH to the NUC is needed for the deploy step:
    # Verify — should connect without a password prompt
    ssh lvs@192.168.1.50 "echo SSH OK"
 
-Step 9 — Set Up GNSS Simulator
---------------------------------
+Step 10 — Set Up GNSS Simulator
+---------------------------------
 
 During development the ``socat`` tool creates a virtual serial port
 that feeds NMEA sentences, replacing a physical GNSS receiver.

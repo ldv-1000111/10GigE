@@ -167,7 +167,7 @@ a previously captured SHR Bayer frame saved as a ``.bin`` file:
    <!-- In VimbaCameraSimulatorTL.xml -->
    <ImageSource>
        <Type>File</Type>
-       <Path>/home/luis/test_frames/shr411_bayer12.bin</Path>
+       <Path>/home/lvs/test_frames/shr411_bayer12.bin</Path>
    </ImageSource>
 
 .. note::
@@ -276,7 +276,7 @@ by simply copying the compiled binary and Vimba X shared libraries:
 
    # On the V3000 — run
    ssh luis@v3000-ip
-   export LD_LIBRARY_PATH=~/VimbaX_2026-1/api/lib/x86_64:$LD_LIBRARY_PATH
+   export LD_LIBRARY_PATH=~/VimbaX_2026-1/api/lib:$LD_LIBRARY_PATH
    ./SHR_Camera_App 192.168.10.42 0
 
 Alternatively, since the V3000 runs the same OS, install Vimba X on it

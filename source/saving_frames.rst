@@ -166,8 +166,8 @@ To keep ``FrameReceived()`` fast, copy the data and signal a worker thread:
            }
 
            VmbUint32_t w = 0, h = 0;
-           VmbPixelFormat_t fmt{};
-           void* pData = nullptr;
+           VmbPixelFormatType fmt{};
+           VmbUchar_t* pData = nullptr;
            pFrame->GetWidth(w);
            pFrame->GetHeight(h);
            pFrame->GetPixelFormat(fmt);

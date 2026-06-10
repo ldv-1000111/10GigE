@@ -1,28 +1,22 @@
 #pragma once
 #include <QObject>
-#include <QImage>
 #include <QDateTime>
 #include <atomic>
 #include <vector>
 #include "VmbCPP/VmbCPP.h"
 
-// Forward declare so FrameObserver can reference CameraWorker
 class CameraWorker;
 
-// ── Frame observer (called by Vimba X on acquisition thread) ──
 class FrameObserver : public VmbCPP::IFrameObserver
 {
 public:
     FrameObserver(VmbCPP::CameraPtr camera, CameraWorker* worker)
         : IFrameObserver(camera), m_worker(worker) {}
-
     void FrameReceived(const VmbCPP::FramePtr pFrame) override;
-
 private:
     CameraWorker* m_worker;
 };
 
-// ── Per-camera acquisition worker ────────────────────────────
 class CameraWorker : public QObject
 {
     Q_OBJECT
@@ -33,7 +27,6 @@ public:
                           QObject*       parent = nullptr);
     ~CameraWorker();
 
-    // Thread-safe: called from FrameObserver
     void onFrameReceived(const VmbCPP::FramePtr& frame);
 
 public slots:
@@ -42,8 +35,10 @@ public slots:
     void softwareTrigger();
 
 signals:
-    void frameReady(int frameIndex, bool geoTagged, int processMs, QString ts);
-    void metricsUpdated(double fps, qint64 bytesWritten, int buffersFree, double bwGBs);
+    void frameReady(int frameIndex, bool geoTagged,
+                    int processMs, const QString& ts);
+    void metricsUpdated(double fps, qint64 bytesWritten,
+                        int buffersFree, double bwGBs);
     void errorOccurred(const QString& msg);
     void statusChanged(const QString& msg);
 
@@ -56,11 +51,9 @@ private:
     QString                              m_cameraId;
     int                                  m_camIndex;
     QString                              m_outputDir;
-
     VmbCPP::CameraPtr                    m_camera;
     std::vector<VmbCPP::FramePtr>        m_frames;
     std::shared_ptr<FrameObserver>       m_observer;
-
     std::atomic<int>                     m_frameCount{0};
     std::atomic<qint64>                  m_bytesWritten{0};
     QDateTime                            m_startTime;

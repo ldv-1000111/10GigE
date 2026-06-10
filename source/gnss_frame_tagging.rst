@@ -18,7 +18,7 @@ packages them together, and hands them to the worker thread:
    struct FramePayload
    {
        std::vector<uint8_t>          rawData;       // copy of frame bytes
-       VmbPixelFormat_t              pixelFormat;
+       VmbPixelFormatType            pixelFormat;
        VmbUint32_t                   width;
        VmbUint32_t                   height;
        VmbUint32_t                   payloadSize;
@@ -43,13 +43,12 @@ packages them together, and hands them to the worker thread:
        // --- Hot path: grab everything atomically, then requeue ---
 
        VmbUint32_t width = 0, height = 0, payloadSize = 0;
-       VmbPixelFormat_t fmt{};
-       void* pData = nullptr;
+       VmbPixelFormatType fmt{};
+       VmbUchar_t* pData = nullptr;
 
        pFrame->GetWidth(width);
        pFrame->GetHeight(height);
-       pFrame->GetPayloadSize(payloadSize);
-       pFrame->GetPixelFormat(fmt);
+          pFrame->GetPixelFormat(fmt);
        pFrame->GetImage(pData);
 
        int idx = ++g_framesCaptured;

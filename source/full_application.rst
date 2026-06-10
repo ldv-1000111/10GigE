@@ -212,8 +212,8 @@ boot before any user session:
    ExecStart=/usr/local/bin/SHR_Backend
    Restart=on-failure
    RestartSec=3s
-   Environment="LD_LIBRARY_PATH=/home/luis/VimbaX_2026-1/api/lib/x86_64"
-   Environment="GENICAM_GENTL64_PATH=/home/luis/VimbaX_2026-1/cti"
+   Environment="LD_LIBRARY_PATH=/home/lvs/VimbaX_2026-1/api/lib/x86_64"
+   Environment="GENICAM_GENTL64_PATH=/home/lvs/VimbaX_2026-1/cti"
 
    # Real-time scheduling permission
    LimitRTPRIO=99

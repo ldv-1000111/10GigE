@@ -57,8 +57,8 @@ Define a class inheriting from ``IFrameObserver``. Vimba X calls
 
            // 2. Extract frame data
            VmbUint32_t width = 0, height = 0;
-           VmbPixelFormat_t format{};
-           void* pData = nullptr;
+           VmbPixelFormatType format{};
+           VmbUchar_t* pData = nullptr;
 
            pFrame->GetWidth(width);
            pFrame->GetHeight(height);

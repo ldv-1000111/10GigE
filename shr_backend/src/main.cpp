@@ -1,4 +1,5 @@
 #include <QCoreApplication>
+#include <QDir>
 #include <QCommandLineParser>
 #include <QThread>
 #include <QTimer>
@@ -72,7 +73,7 @@ int main(int argc, char* argv[])
 
     // ── Vimba X startup ──────────────────────────────────────
     VmbCPP::VmbSystem& vmb = VmbCPP::VmbSystem::GetInstance();
-    VmbErrorT err = vmb.Startup();
+    VmbError_t err = vmb.Startup();
     if (err != VmbErrorSuccess) {
         qCritical() << "Vimba X startup failed:" << err;
         return 1;

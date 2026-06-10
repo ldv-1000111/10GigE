@@ -20,7 +20,7 @@ Check in order:
    echo $GENICAM_GENTL64_PATH
 
    # 4. Run Vimba X Viewer to rule out software issues
-   ~/VimbaX_2026-1/bin/VimbaX_Viewer
+   ~/VimbaX_2026-1/bin/VimbaXViewer
 
    # 5. Check firewall — GigE Vision uses UDP ports 3956 and dynamic ports
    sudo ufw status
@@ -105,7 +105,7 @@ path at runtime:
 
 .. code-block:: bash
 
-   export LD_LIBRARY_PATH=~/VimbaX_2026-1/api/lib/x86_64:$LD_LIBRARY_PATH
+   export LD_LIBRARY_PATH=~/VimbaX_2026-1/api/lib:$LD_LIBRARY_PATH
    ./build/SHR_Capture_App
 
 Add this export to ``~/.bashrc`` to make it permanent.

@@ -125,7 +125,7 @@ correctly and contains ``VimbaCameraSimulatorTL.cti``.
 
 .. note::
    The Vimba X Viewer is named ``VimbaXViewer`` (no space, no
-   underscore) in the actual installation — not ``VimbaX_Viewer``
+   underscore) in the actual installation — not ``VimbaXViewer``
    as shown in some Allied Vision documentation.
 
 What We Use for C++

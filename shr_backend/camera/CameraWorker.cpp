@@ -30,12 +30,12 @@ CameraWorker::~CameraWorker() { teardown(); }
 
 void CameraWorker::start()
 {
-    emit statusChanged(QString("Camera %1: opening %2").arg(m_camIndex).arg(m_cameraId));
+    emit statusChanged(QString("Camera %1: opening %2")
+                       .arg(m_camIndex).arg(m_cameraId));
 
     VmbCPP::VmbSystem& sys = VmbCPP::VmbSystem::GetInstance();
 
-    // Open camera
-    VmbErrorT err = sys.OpenCameraByID(
+    VmbError_t err = sys.OpenCameraByID(
         m_cameraId.toLocal8Bit().constData(),
         VmbAccessModeFull,
         m_camera);
@@ -49,21 +49,20 @@ void CameraWorker::start()
     configureCamera();
     setupBuffers();
 
-    // AcquisitionStart
     VmbCPP::FeaturePtr feature;
     m_camera->GetFeatureByName("AcquisitionStart", feature);
     feature->RunCommand();
 
     m_startTime = QDateTime::currentDateTimeUtc();
-    emit statusChanged(QString("Camera %1: acquisition running").arg(m_camIndex));
+    emit statusChanged(QString("Camera %1: acquiring").arg(m_camIndex));
 }
 
 void CameraWorker::stop()
 {
-    VmbCPP::FeaturePtr feature;
     if (m_camera) {
+        VmbCPP::FeaturePtr feature;
         m_camera->GetFeatureByName("AcquisitionStop", feature);
-        feature->RunCommand();
+        if (feature) feature->RunCommand();
         m_camera->EndCapture();
         m_camera->FlushQueue();
         m_camera->RevokeAllFrames();
@@ -93,7 +92,6 @@ void CameraWorker::configureCamera()
             f->SetValue(val);
     };
 
-    // Full resolution
     VmbInt64_t maxW = 0, maxH = 0;
     VmbCPP::FeaturePtr f;
     if (VmbErrorSuccess == m_camera->GetFeatureByName("WidthMax",  f)) f->GetValue(maxW);
@@ -106,12 +104,12 @@ void CameraWorker::configureCamera()
     setEnum("TriggerSelector","FrameStart");
     setEnum("TriggerSource",  "Software");
     setEnum("TriggerMode",    "On");
-    setInt ("GVSPBurstSize",  64);
 
     VmbInt64_t w = 0, h = 0;
     if (VmbErrorSuccess == m_camera->GetFeatureByName("Width",  f)) f->GetValue(w);
     if (VmbErrorSuccess == m_camera->GetFeatureByName("Height", f)) f->GetValue(h);
-    emit statusChanged(QString("Camera %1: %2×%3 BayerGR12").arg(m_camIndex).arg(w).arg(h));
+    emit statusChanged(QString("Camera %1: %2x%3 BayerGR12")
+                       .arg(m_camIndex).arg(w).arg(h));
 }
 
 void CameraWorker::setupBuffers()
@@ -148,7 +146,6 @@ void CameraWorker::onFrameReceived(const VmbCPP::FramePtr& pFrame)
 {
     QElapsedTimer timer; timer.start();
 
-    // Status check
     VmbFrameStatusType status;
     if (VmbErrorSuccess != pFrame->GetReceiveStatus(status) ||
         status != VmbFrameStatusComplete) {
@@ -156,32 +153,32 @@ void CameraWorker::onFrameReceived(const VmbCPP::FramePtr& pFrame)
         return;
     }
 
-    VmbUint32_t     width = 0, height = 0, payloadSize = 0;
-    VmbPixelFormat_t fmt{};
-    void*            pData = nullptr;
+    VmbUint32_t        width = 0, height = 0;
+    VmbPixelFormatType fmt{};
+    VmbUchar_t*        pData = nullptr;
 
     pFrame->GetWidth(width);
     pFrame->GetHeight(height);
-    pFrame->GetPayloadSize(payloadSize);
     pFrame->GetPixelFormat(fmt);
     pFrame->GetImage(pData);
 
     int idx = ++m_frameCount;
 
-    // Snapshot GNSS atomically
     auto gnssSnapshot = std::atomic_load(&g_currentGnss);
     QDateTime captureTime = QDateTime::currentDateTimeUtc();
 
-    // Transform: Bayer → RGB8
+    // Transform Bayer → RGB8
     std::vector<uint8_t> rgb(width * height * 3);
-    bool transformOk = ImageTransform::bayerToRGB8(pData, fmt, width, height, rgb);
+    bool ok = ImageTransform::bayerToRGB8(
+        pData,
+        static_cast<VmbPixelFormat_t>(fmt),
+        width, height, rgb);
 
-    // Requeue immediately — critical for sustained streaming
+    // Requeue immediately
     m_camera->QueueFrame(pFrame);
 
-    if (!transformOk) return;
+    if (!ok) return;
 
-    // Build file paths
     QString baseName = QString("cam%1_frame_%2")
         .arg(m_camIndex)
         .arg(idx, 5, 10, QChar('0'));
@@ -191,10 +188,13 @@ void CameraWorker::onFrameReceived(const VmbCPP::FramePtr& pFrame)
     // Write PPM
     QFile imgFile(imagePath);
     if (imgFile.open(QIODevice::WriteOnly)) {
-        imgFile.write(QString("P6\n%1 %2\n255\n").arg(width).arg(height).toLocal8Bit());
-        imgFile.write(reinterpret_cast<const char*>(rgb.data()), rgb.size());
+        imgFile.write(
+            QString("P6\n%1 %2\n255\n").arg(width).arg(height)
+            .toLocal8Bit());
+        imgFile.write(reinterpret_cast<const char*>(rgb.data()),
+                      static_cast<qint64>(rgb.size()));
         imgFile.close();
-        m_bytesWritten += rgb.size();
+        m_bytesWritten += static_cast<qint64>(rgb.size());
     }
 
     // Write JSON sidecar
@@ -213,9 +213,10 @@ void CameraWorker::onFrameReceived(const VmbCPP::FramePtr& pFrame)
     int elapsedMs = static_cast<int>(timer.elapsed());
     bool geoTagged = gnssSnapshot && gnssSnapshot->valid;
 
-    qInfo() << QString("[Cam%1] Frame %2 saved — %3×%4 — %5 — %6ms")
-               .arg(m_camIndex).arg(idx).arg(width).arg(height)
-               .arg(geoTagged ? "geo-tagged" : "no-fix")
+    qInfo() << QString("[Cam%1] #%2 %3x%4 %5 %6ms")
+               .arg(m_camIndex).arg(idx)
+               .arg(width).arg(height)
+               .arg(geoTagged ? "geo" : "no-fix")
                .arg(elapsedMs);
 
     emitMetrics();
@@ -227,10 +228,8 @@ void CameraWorker::emitMetrics()
 {
     double secs = m_startTime.secsTo(QDateTime::currentDateTimeUtc());
     double fps  = secs > 0 ? m_frameCount.load() / secs : 0.0;
-    double bw   = secs > 0 ? (m_bytesWritten.load() / secs) / 1e9 : 0.0;
-
-    emit metricsUpdated(fps,
-                        m_bytesWritten.load(),
-                        BUFFER_COUNT,   // simplified — full impl counts free buffers
-                        bw);
+    double bw   = secs > 0
+                  ? (m_bytesWritten.load() / secs) / 1e9
+                  : 0.0;
+    emit metricsUpdated(fps, m_bytesWritten.load(), BUFFER_COUNT, bw);
 }

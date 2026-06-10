@@ -205,30 +205,49 @@ All four files should be present. This is **Checkpoint 2**.
 Part C — Deploy to NUC
 ------------------------
 
-From the **laptop**, copy the binary and Vimba X libraries to the NUC:
+From the **laptop**, copy the binary and all Vimba X runtime files to the NUC:
 
 .. code-block:: bash
 
-   # Binary
+   # Binary + VmbC.xml (must be in the working directory at runtime)
    rsync -avz build/SHR_Backend lvs@192.168.1.50:~/shr/
+   rsync -avz ${VIMBAX_DIR}/api/lib/VmbC.xml lvs@192.168.1.50:~/shr/
 
    # Vimba X shared libraries
    rsync -avz \
-       build/libVmbCPP.so \
-       build/libVmbImageTransform.so \
-       build/VimbaCameraSimulatorTL.cti \
+       ${VIMBAX_DIR}/api/lib/libVmbC.so \
+       ${VIMBAX_DIR}/api/lib/libVmbCPP.so \
+       ${VIMBAX_DIR}/api/lib/libVmbImageTransform.so \
        lvs@192.168.1.50:~/vimba_libs/
 
-   # Vimba X transport layer config and CTI files
-   rsync -avz ${VIMBAX_DIR}/bin/VmbC.xml lvs@192.168.1.50:~/vimba_libs/
+   # GenICam runtime (required by Vimba X)
+   rsync -avz ${VIMBAX_DIR}/api/lib/GenICam/ \
+       lvs@192.168.1.50:~/vimba_libs/GenICam/
 
+   # Transport layer CTI files
    rsync -avz ${VIMBAX_DIR}/cti/*.cti lvs@192.168.1.50:~/vimba_libs/
+
+   # Camera Simulator config files (must be alongside the .cti)
+   rsync -avz \
+       ${VIMBAX_DIR}/cti/VimbaCameraSimulatorTL.xml \
+       ${VIMBAX_DIR}/cti/VimbaCameraSimulatorTLPresets.json \
+       lvs@192.168.1.50:~/vimba_libs/
+
+.. note::
+   ``VmbC.xml`` must be in the same directory as the binary (``~/shr/``),
+   not in ``~/vimba_libs/``. The GenICam runtime libraries must be in a
+   subdirectory ``GenICam/`` under ``vimba_libs/``.
+
+   If you have customised ``VimbaCameraSimulatorTL.xml`` or
+   ``VimbaCameraSimulatorTLPresets.json`` on the laptop (see
+   :doc:`laptop_setup`), those customised versions will be deployed
+   automatically by the rsync commands above.
 
 Verify on the NUC:
 
 .. code-block:: bash
 
-   ssh lvs@192.168.1.50 "ls -lh ~/shr/ ~/vimba_libs/"
+   ssh lvs@192.168.1.50 "ls -lh ~/shr/ && ls ~/vimba_libs/ | head -20"
 
 ----
 
@@ -242,7 +261,7 @@ SSH into the NUC and run the backend manually — **not as a service yet**:
    ssh lvs@192.168.1.50
 
    cd ~/shr
-   LD_LIBRARY_PATH=~/vimba_libs \
+   LD_LIBRARY_PATH=~/vimba_libs:~/vimba_libs/GenICam \
    GENICAM_GENTL64_PATH=~/vimba_libs \
    ./SHR_Backend --simulator --gnss-port /dev/ttyUSB0
 
@@ -253,20 +272,30 @@ Expected output:
    ===========================================
     SHR Backend 1.0
     Simulator:   yes
-    GNSS port:   /dev/ttyUSB0 @ 9600
-    Output dir:  /home/lvs/frames
+    GNSS port:   "/dev/ttyUSB0" @ 9600
+    Output dir:  "/home/lvs/frames"
     TCP port:    9100
    ===========================================
    Vimba X started
-   Cameras found: 1
-     [0] DEV_SimulatedCamera_... Simulated Camera
-   [GNSS] Open: /dev/ttyUSB0 @ 9600
-   [Cam1] 1920×1080 BayerGR12
-   [Cam1] payload 6 MB
+   Camera Simulator mode — enumerating...
+   Cameras found: 2
+     [0] "DEV_SHR-101MP" "Allied Vision Camera Simulator (SHR-sim-101MP)..."
+     [1] "DEV_SHR-151MP" "Allied Vision Camera Simulator (SHR-sim-151MP)..."
+   [Trigger] UDP server listening on : 9001
+   [Server] Listening on TCP : 9100
    SHR Backend running.
-     TCP status stream: :9100
+     TCP status stream: : 9100
      UDP trigger:       :9001
      Press Ctrl+C to stop.
+   [GNSS] ERROR: "Cannot open /dev/ttyUSB0: No such file or directory"
+   "Camera 1: opening DEV_SHR-101MP"
+   "Camera 2: opening DEV_SHR-151MP"
+   "Camera 1: 11648x8742 BayerGR12"
+   "Camera 1: payload 291 MB"
+   "Camera 2: 14192x10640 BayerGR12"
+   "Camera 2: payload 432 MB"
+   "Camera 1: acquiring"
+   "Camera 2: acquiring"
 
 .. note::
    If no GNSS receiver is connected, the ``[GNSS]`` line will show an
@@ -346,6 +375,9 @@ automatically at boot:
 .. code-block:: bash
 
    # On the NUC
+   # First update the service LD_LIBRARY_PATH to include GenICam
+   sudo sed -i        's|LD_LIBRARY_PATH=.*|LD_LIBRARY_PATH=/home/lvs/vimba_libs:/home/lvs/vimba_libs/GenICam|'        /etc/systemd/system/shr-backend.service
+   sudo systemctl daemon-reload
    sudo systemctl enable shr-backend
    sudo systemctl start  shr-backend
 

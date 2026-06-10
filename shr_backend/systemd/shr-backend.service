@@ -10,7 +10,7 @@ WorkingDirectory=/home/lvs/shr
 ExecStart=/home/lvs/shr/SHR_Backend --simulator --gnss-port /dev/ttyUSB0 --output /home/lvs/frames
 Restart=on-failure
 RestartSec=3s
-Environment="LD_LIBRARY_PATH=/home/lvs/vimba_libs"
+Environment="LD_LIBRARY_PATH=/home/lvs/vimba_libs:/home/lvs/vimba_libs/GenICam"
 Environment="GENICAM_GENTL64_PATH=/home/lvs/vimba_libs"
 LimitRTPRIO=99
 LimitMEMLOCK=infinity

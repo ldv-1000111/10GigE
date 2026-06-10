@@ -122,7 +122,96 @@ a simulated camera — something like ``DEV_SimulatedCamera_...``.
 This is **Checkpoint 1** — do not proceed to the build until the
 Viewer shows the simulated camera.
 
-Step 8 — Set Up SSH Key for NUC
+Step 8 — Add SHR Camera Simulator Presets
+-------------------------------------------
+
+By default the Camera Simulator only shows small Alvium-class cameras.
+To simulate the SHR resolutions, add the SHR presets to
+``VimbaCameraSimulatorTLPresets.json``.
+
+Open the file:
+
+.. code-block:: bash
+
+   nano ~/VimbaX_2026-1/cti/VimbaCameraSimulatorTLPresets.json
+
+The file contains a single ``"presets"`` object. Add the two SHR entries
+**inside** that object, after the last existing entry (``G5-2460c``).
+Add a comma after the closing ``}`` of ``G5-2460c`` then append:
+
+.. code-block:: json
+
+   "SHR-sim-101MP": {
+       "width": 11648,
+       "height": 8742,
+       "link_speed": 1250000000,
+       "throughput_limit": 1100000000,
+       "sensor": "color"
+   },
+   "SHR-sim-151MP": {
+       "width": 14192,
+       "height": 10640,
+       "link_speed": 1250000000,
+       "throughput_limit": 1100000000,
+       "sensor": "color"
+   }
+
+The end of the file should look like this:
+
+.. code-block:: json
+
+       "G5-2460c": {
+           "width": 5328,
+           "height": 4608,
+           "link_speed": 1250000000,
+           "throughput_limit": 599054745,
+           "sensor": "color"
+       },
+       "SHR-sim-101MP": {
+           "width": 11648,
+           "height": 8742,
+           "link_speed": 1250000000,
+           "throughput_limit": 1100000000,
+           "sensor": "color"
+       },
+       "SHR-sim-151MP": {
+           "width": 14192,
+           "height": 10640,
+           "link_speed": 1250000000,
+           "throughput_limit": 1100000000,
+           "sensor": "color"
+       }
+   }
+   }
+
+.. note::
+   The format used by this file is different from what the Vimba X
+   documentation examples show. Entries use ``"sensor"`` (``"color"``
+   or ``"mono"``), ``"link_speed"``, and ``"throughput_limit"`` —
+   not ``"pixel_format"`` or ``"frame_rate"``. The key name is the
+   camera model name. There is no ``"name"`` field.
+
+Verify the JSON is valid before restarting the Viewer:
+
+.. code-block:: bash
+
+   python3 -c "
+   import json
+   with open('/home/lvs/VimbaX_2026-1/cti/VimbaCameraSimulatorTLPresets.json') as f:
+       d = json.load(f)
+   print('Valid —', len(d['presets']), 'presets')
+   print('SHR entries:', [k for k in d['presets'] if 'SHR' in k])
+   "
+
+Restart the Viewer:
+
+.. code-block:: bash
+
+   $VIMBAX_DIR/bin/VimbaXViewer
+
+The SHR cameras should now appear in the simulated camera list.
+
+Step 9 — Set Up SSH Key for NUC
 ---------------------------------
 
 Passwordless SSH to the NUC is needed for the deploy step:

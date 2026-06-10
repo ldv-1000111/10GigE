@@ -205,49 +205,77 @@ All four files should be present. This is **Checkpoint 2**.
 Part C — Deploy to NUC
 ------------------------
 
-From the **laptop**, copy the binary and all Vimba X runtime files to the NUC:
+From the **laptop**, copy the binary and all Vimba X runtime files to the NUC.
+Run all commands from the ``shr_backend`` project directory.
+
+**Binary and transport layer config** — deployed to ``~/shr/``
+(``VmbC.xml`` must be in the same directory as the binary):
 
 .. code-block:: bash
 
-   # Binary + VmbC.xml (must be in the working directory at runtime)
-   rsync -avz build/SHR_Backend lvs@192.168.1.50:~/shr/
-   rsync -avz ${VIMBAX_DIR}/api/lib/VmbC.xml lvs@192.168.1.50:~/shr/
+   rsync -avz build/SHR_Backend                lvs@192.168.1.50:~/shr/
+   rsync -avz ${VIMBAX_DIR}/api/lib/VmbC.xml   lvs@192.168.1.50:~/shr/
 
-   # Vimba X shared libraries
+**Vimba X shared libraries** — deployed to ``~/vimba_libs/``:
+
+.. code-block:: bash
+
    rsync -avz \
        ${VIMBAX_DIR}/api/lib/libVmbC.so \
        ${VIMBAX_DIR}/api/lib/libVmbCPP.so \
        ${VIMBAX_DIR}/api/lib/libVmbImageTransform.so \
        lvs@192.168.1.50:~/vimba_libs/
 
-   # GenICam runtime (required by Vimba X)
+**GenICam runtime** — deployed to ``~/vimba_libs/GenICam/``
+(required by Vimba X, must be in its own subfolder):
+
+.. code-block:: bash
+
    rsync -avz ${VIMBAX_DIR}/api/lib/GenICam/ \
        lvs@192.168.1.50:~/vimba_libs/GenICam/
 
-   # Transport layer CTI files
+**Transport layer CTI files** — deployed to ``~/vimba_libs/``:
+
+.. code-block:: bash
+
    rsync -avz ${VIMBAX_DIR}/cti/*.cti lvs@192.168.1.50:~/vimba_libs/
 
-   # Camera Simulator config files (must be alongside the .cti)
+**Camera Simulator config** — deployed to ``~/vimba_libs/``
+(must be alongside the ``.cti`` file):
+
+.. code-block:: bash
+
    rsync -avz \
        ${VIMBAX_DIR}/cti/VimbaCameraSimulatorTL.xml \
        ${VIMBAX_DIR}/cti/VimbaCameraSimulatorTLPresets.json \
        lvs@192.168.1.50:~/vimba_libs/
 
 .. note::
-   ``VmbC.xml`` must be in the same directory as the binary (``~/shr/``),
-   not in ``~/vimba_libs/``. The GenICam runtime libraries must be in a
-   subdirectory ``GenICam/`` under ``vimba_libs/``.
-
    If you have customised ``VimbaCameraSimulatorTL.xml`` or
-   ``VimbaCameraSimulatorTLPresets.json`` on the laptop (see
-   :doc:`laptop_setup`), those customised versions will be deployed
-   automatically by the rsync commands above.
+   ``VimbaCameraSimulatorTLPresets.json`` on the laptop
+   (see :doc:`laptop_setup`), those customised versions are deployed
+   automatically by the commands above.
 
-Verify on the NUC:
+Verify the NUC layout after deploying:
 
 .. code-block:: bash
 
-   ssh lvs@192.168.1.50 "ls -lh ~/shr/ && ls ~/vimba_libs/ | head -20"
+   ssh lvs@192.168.1.50 "ls -lh ~/shr/ && ls ~/vimba_libs/"
+
+Expected:
+
+.. code-block:: text
+
+   ~/shr/:
+   SHR_Backend    VmbC.xml
+
+   ~/vimba_libs/:
+   GenICam/
+   libVmbC.so            libVmbCPP.so         libVmbImageTransform.so
+   VimbaCameraSimulatorTL.cti     VimbaCameraSimulatorTL.xml
+   VimbaCameraSimulatorTLPresets.json
+   VimbaGigETL.cti       VimbaUSBTL.cti
+   libsv_gev_rdma_tl.cti
 
 ----
 

@@ -155,7 +155,7 @@ The service file is included in the repository. Copy it to the system:
 
 .. note::
    Do **not** enable the service yet. Enable it only after the first
-   successful manual run in Step D below.
+   successful manual run in Part D below.
 
 Step 7 — Reboot the NUC
 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -196,25 +196,24 @@ Verify the build output:
    ls -lh build/SHR_Backend
    ls -lh build/libVmbCPP.so
    ls -lh build/libVmbImageTransform.so
-   ls -lh build/VimbaCameraSimulatorTL.cti
 
-All four files should be present. This is **Checkpoint 2**.
+All three files should be present. This is **Checkpoint 2**.
 
 ----
 
 Part C — Deploy to NUC
 ------------------------
 
-From the **laptop**, copy the binary and all Vimba X runtime files to the NUC.
-Run all commands from the ``shr_backend`` project directory.
+From the **laptop**, copy the binary and all Vimba X runtime files to the
+NUC. Run all commands from the ``shr_backend`` project directory.
 
 **Binary and transport layer config** — deployed to ``~/shr/``
 (``VmbC.xml`` must be in the same directory as the binary):
 
 .. code-block:: bash
 
-   rsync -avz build/SHR_Backend                lvs@192.168.1.50:~/shr/
-   rsync -avz ${VIMBAX_DIR}/api/lib/VmbC.xml   lvs@192.168.1.50:~/shr/
+   rsync -avz build/SHR_Backend              lvs@192.168.1.50:~/shr/
+   rsync -avz ${VIMBAX_DIR}/api/lib/VmbC.xml lvs@192.168.1.50:~/shr/
 
 **Vimba X shared libraries** — deployed to ``~/vimba_libs/``:
 
@@ -271,10 +270,10 @@ Expected:
 
    ~/vimba_libs/:
    GenICam/
-   libVmbC.so            libVmbCPP.so         libVmbImageTransform.so
-   VimbaCameraSimulatorTL.cti     VimbaCameraSimulatorTL.xml
+   libVmbC.so              libVmbCPP.so           libVmbImageTransform.so
+   VimbaCameraSimulatorTL.cti    VimbaCameraSimulatorTL.xml
    VimbaCameraSimulatorTLPresets.json
-   VimbaGigETL.cti       VimbaUSBTL.cti
+   VimbaGigETL.cti         VimbaUSBTL.cti
    libsv_gev_rdma_tl.cti
 
 ----
@@ -320,15 +319,16 @@ Expected output:
    "Camera 2: opening DEV_SHR-151MP"
    "Camera 1: 11648x8742 BayerGR12"
    "Camera 1: payload 291 MB"
+   "Camera 1: acquiring"
    "Camera 2: 14192x10640 BayerGR12"
    "Camera 2: payload 432 MB"
-   "Camera 1: acquiring"
    "Camera 2: acquiring"
 
 .. note::
-   If no GNSS receiver is connected, the ``[GNSS]`` line will show an
-   error — this is expected. Use ``/tmp/ttyGNSS`` from the GNSS
-   simulator on the laptop instead (see :doc:`laptop_setup`).
+   The GNSS error is expected when no receiver is connected to
+   ``/dev/ttyUSB0``. The backend continues running normally.
+   The ``GC_ERR_NOT_IMPLEMENTED`` warnings from the USB TL are
+   also normal on Linux and can be ignored.
 
 This is **Checkpoint 3**.
 
@@ -337,8 +337,8 @@ This is **Checkpoint 3**.
 Part E — Stage 1 Verification
 -------------------------------
 
-With the backend running on the NUC, run these tests **from the laptop**
-in a separate terminal.
+With the backend running on the NUC, open a **second terminal on the
+laptop** and run the following tests.
 
 **Test 1 — TCP status stream is flowing:**
 
@@ -346,51 +346,93 @@ in a separate terminal.
 
    nc 192.168.1.50 9100
 
-You should see JSON status messages scrolling at ~10 Hz:
+You should see a continuous stream of single-line JSON messages at
+~10 Hz. Each message is one line — keys appear in alphabetical order:
 
 .. code-block:: text
 
-   {"type":"status","cam1":{"frames":0,"fps":0.0,...},"gnss":{"valid":false},...}
+   {"cam1":{"buf_free":5,"bw_gbs":0,"dropped":0,"fps":0,"frames":0,"geo_tagged":false,"written_gb":0},"cam2":{"buf_free":5,"bw_gbs":0,"dropped":0,"fps":0,"frames":0,"geo_tagged":false,"written_gb":0},"gnss":{"valid":false},"sync":{"delta_ms":0.8,"dropped_total":0,"total_bw_gbs":0},"type":"status"}
 
-Press ``Ctrl+C`` to stop.
+Note that ``"type":"status"`` appears at the **end** of each line
+because Qt's ``QJsonDocument`` serialises keys alphabetically.
 
-**Test 2 — Start acquisition:**
+Press ``Ctrl+C`` to stop ``nc``.
 
-.. code-block:: bash
+**Test 2 — Software trigger:**
 
-   echo '{"type":"start"}' | nc 192.168.1.50 9100
-
-Watch the NUC terminal — camera should start acquiring.
-
-**Test 3 — Software trigger:**
+The cameras start acquiring automatically when the backend opens them.
+Send a trigger directly — no separate start command needed:
 
 .. code-block:: bash
 
    echo '{"type":"trigger","target":"both"}' | nc 192.168.1.50 9100
 
-**Test 4 — Verify files written on NUC:**
-
-.. code-block:: bash
-
-   ssh lvs@192.168.1.50 "ls -lh ~/frames/ | head -10"
-
-You should see PPM and JSON files:
+On the NUC terminal you should see:
 
 .. code-block:: text
 
-   cam1_frame_00001.ppm    6.2M
-   cam1_frame_00001.json   2.1K
+   "[Cam1] #1 11648x8742 geo no-fix 163ms"
+   "[Cam2] #1 14192x10640 geo no-fix 161ms"
 
-**Test 5 — Inspect the JSON sidecar:**
+**Test 3 — Verify files written on NUC:**
+
+.. code-block:: bash
+
+   ssh lvs@192.168.1.50 "ls -lh ~/frames/"
+
+Expected:
+
+.. code-block:: text
+
+   -rw-rw-r-- 1 lvs lvs  435 cam1_frame_00001.json
+   -rw-rw-r-- 1 lvs lvs  292M cam1_frame_00001.ppm
+   -rw-rw-r-- 1 lvs lvs  436 cam2_frame_00001.json
+   -rw-rw-r-- 1 lvs lvs  433M cam2_frame_00001.ppm
+
+**Test 4 — Inspect the JSON sidecar:**
 
 .. code-block:: bash
 
    ssh lvs@192.168.1.50 "cat ~/frames/cam1_frame_00001.json"
 
-Verify the structure contains ``frame_index``, ``image``, and ``gnss``
-fields.
+Expected output:
 
-All five tests passing is **Stage 1 complete**.
+.. code-block:: json
+
+   {
+       "camera_index": 1,
+       "camera_timestamp_ns": 0,
+       "capture_timestamp_utc": "2026-06-10T20:36:12.786Z",
+       "frame_filename": "cam1_frame_00001.ppm",
+       "frame_index": 1,
+       "gnss": {
+           "fix_description": "No fix",
+           "fix_quality": 0,
+           "valid": false
+       },
+       "image": {
+           "height": 8742,
+           "output_format": "RGB8-PPM",
+           "pixel_format_raw": "BayerGR12",
+           "width": 11648
+       }
+   }
+
+**Test 5 — Status stream shows frame count incrementing:**
+
+.. code-block:: bash
+
+   nc 192.168.1.50 9100
+
+After triggering, the ``frames`` and ``written_gb`` fields should
+increment in the status stream:
+
+.. code-block:: text
+
+   "cam1":{"frames":1,"written_gb":0.305...}
+   "cam2":{"frames":1,"written_gb":0.453...}
+
+All four tests passing is **Stage 1 complete**.
 
 ----
 
@@ -398,25 +440,27 @@ Part F — Enable systemd Service
 ---------------------------------
 
 Once Stage 1 passes, enable the service so the backend starts
-automatically at boot:
+automatically at boot. Run these commands **on the NUC**:
 
 .. code-block:: bash
 
-   # On the NUC
-   # First update the service LD_LIBRARY_PATH to include GenICam
-   sudo sed -i        's|LD_LIBRARY_PATH=.*|LD_LIBRARY_PATH=/home/lvs/vimba_libs:/home/lvs/vimba_libs/GenICam|'        /etc/systemd/system/shr-backend.service
+   # Update the service LD_LIBRARY_PATH to include GenICam
+   sudo sed -i \
+       's|LD_LIBRARY_PATH=.*|LD_LIBRARY_PATH=/home/lvs/vimba_libs:/home/lvs/vimba_libs/GenICam|' \
+       /etc/systemd/system/shr-backend.service
+
    sudo systemctl daemon-reload
    sudo systemctl enable shr-backend
-   sudo systemctl start  shr-backend
+   sudo systemctl start shr-backend
 
    # Verify
    sudo systemctl status shr-backend
    journalctl -u shr-backend -f
 
-For future deploys, after rebuilding and rsyncing the binary:
+For future deploys, after rebuilding on the laptop:
 
 .. code-block:: bash
 
-   # From laptop
+   # From the laptop
    rsync -avz build/SHR_Backend lvs@192.168.1.50:~/shr/
    ssh lvs@192.168.1.50 "sudo systemctl restart shr-backend"

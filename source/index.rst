@@ -105,6 +105,12 @@ Ultra-High-Resolution Machine Vision with Geolocation on Linux
    gnss_full_implementation
 
 .. toctree::
+   :maxdepth: 2
+   :caption: Part VII — Production Hardening
+
+   os_hardening
+
+.. toctree::
    :maxdepth: 1
    :caption: Reference
 

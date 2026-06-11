@@ -458,24 +458,30 @@ connected — this is correct behaviour.
 **Test 5 — written_gb updates in status stream after trigger**
 
 With ``nc 192.168.1.50 9100`` still running in your second terminal,
-send another trigger and watch the status stream immediately after:
+send several triggers and watch the status stream:
 
 .. code-block:: bash
 
    echo '{"type":"trigger","target":"both"}' | nc 192.168.1.50 9100
 
-In the status stream terminal you will see ``written_gb`` grow with
-each trigger. After two triggers the values will be approximately:
+After several triggers ``written_gb`` accumulates. With 3–4 triggers
+per camera the values will look similar to:
 
 .. code-block:: text
 
-   "cam1":{..., "bw_gbs":0.0052, "written_gb":0.3054, ...}
-   "cam2":{..., "bw_gbs":0.0076, "written_gb":0.4530, ...}
+   "cam1":{...,"bw_gbs":0.0023715415019762848,...,"written_gb":1.35902592,...}
+   "cam2":{...,"bw_gbs":0.0023715415019762848,...,"written_gb":1.80953856,...}
    "type":"status"}
 
-The ``bw_gbs`` values reflect the average write rate since the backend
-started — they are low because triggering manually is infrequent. At
-sustained acquisition rates both values will be much higher.
+The ``written_gb`` value confirms frames are being written to NVMe —
+each trigger adds ~292 MB for cam1 and ~433 MB for cam2.
+
+The ``bw_gbs`` value will be very low during manual triggering (around
+0.002 GB/s) because it is calculated as total bytes written divided by
+total time since the backend started. Manual triggers are infrequent
+compared to the session duration so the average bandwidth is low. At
+sustained 6 fps continuous acquisition this value will be close to
+1.25 GB/s per camera.
 
 All five tests passing is **Stage 1 complete**.
 

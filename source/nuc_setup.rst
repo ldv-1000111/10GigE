@@ -491,27 +491,51 @@ Part F — Enable systemd Service
 ---------------------------------
 
 Once Stage 1 passes, enable the service so the backend starts
-automatically at boot. Run these commands **on the NUC**:
+automatically at boot.
+
+**Step 1 — Deploy the service file from the laptop:**
 
 .. code-block:: bash
 
-   # Update the service LD_LIBRARY_PATH to include GenICam
-   sudo sed -i \
-       's|LD_LIBRARY_PATH=.*|LD_LIBRARY_PATH=/home/lvs/vimba_libs:/home/lvs/vimba_libs/GenICam|' \
-       /etc/systemd/system/shr-backend.service
+   # From the laptop
+   scp shr_backend/systemd/shr-backend.service lvs@192.168.1.50:/tmp/
 
+**Step 2 — Install and enable on the NUC:**
+
+.. code-block:: bash
+
+   # On the NUC
+   sudo cp /tmp/shr-backend.service /etc/systemd/system/
    sudo systemctl daemon-reload
    sudo systemctl enable shr-backend
    sudo systemctl start shr-backend
 
-   # Verify
+**Step 3 — Verify:**
+
+.. code-block:: bash
+
    sudo systemctl status shr-backend
    journalctl -u shr-backend -f
 
-For future deploys, after rebuilding on the laptop:
+Expected status output:
+
+.. code-block:: text
+
+   ● shr-backend.service - SHR Camera Acquisition Backend
+        Loaded: loaded (/etc/systemd/system/shr-backend.service; enabled)
+        Active: active (running) since ...
+      Main PID: XXXX (SHR_Backend)
+
+**For future deploys** — after rebuilding on the laptop, redeploy the
+binary and restart the service:
 
 .. code-block:: bash
 
    # From the laptop
    rsync -avz build/SHR_Backend lvs@192.168.1.50:~/shr/
    ssh lvs@192.168.1.50 "sudo systemctl restart shr-backend"
+
+.. note::
+   Always deploy the service file via ``scp`` from the repo rather
+   than editing it directly on the NUC. This keeps the file in sync
+   with version control and avoids manual editing errors.

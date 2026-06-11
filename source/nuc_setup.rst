@@ -338,64 +338,96 @@ Part E — Stage 1 Verification
 -------------------------------
 
 With the backend running on the NUC, open a **second terminal on the
-laptop** and run the following tests.
+laptop** for the following tests. Leave the NUC terminal visible so
+you can watch both sides simultaneously.
 
-**Test 1 — TCP status stream is flowing:**
+**Test 1 — TCP status stream is flowing**
+
+Connect to the backend status stream:
 
 .. code-block:: bash
 
    nc 192.168.1.50 9100
 
-You should see a continuous stream of single-line JSON messages at
-~10 Hz. Each message is one line — keys appear in alphabetical order:
+The backend pushes one JSON message per line at ~10 Hz. Each message
+is a single long line — keys are in alphabetical order because Qt's
+``QJsonDocument`` serialises them that way. The message ends with
+``"type":"status"}``:
 
 .. code-block:: text
 
    {"cam1":{"buf_free":5,"bw_gbs":0,"dropped":0,"fps":0,"frames":0,"geo_tagged":false,"written_gb":0},"cam2":{"buf_free":5,"bw_gbs":0,"dropped":0,"fps":0,"frames":0,"geo_tagged":false,"written_gb":0},"gnss":{"valid":false},"sync":{"delta_ms":0.8,"dropped_total":0,"total_bw_gbs":0},"type":"status"}
 
-Note that ``"type":"status"`` appears at the **end** of each line
-because Qt's ``QJsonDocument`` serialises keys alphabetically.
+The stream continues scrolling until you press ``Ctrl+C``. Keep
+``nc`` running in this terminal — you will watch the values change
+during the next tests.
 
-Press ``Ctrl+C`` to stop ``nc``.
+**Test 2 — Software trigger fires both cameras**
 
-**Test 2 — Software trigger:**
-
-The cameras start acquiring automatically when the backend opens them.
-Send a trigger directly — no separate start command needed:
+Open a **third terminal** on the laptop and send a trigger command.
+The cameras start acquiring automatically when the backend opens them
+— no separate start command is needed:
 
 .. code-block:: bash
 
    echo '{"type":"trigger","target":"both"}' | nc 192.168.1.50 9100
 
-On the NUC terminal you should see:
+What happens when the trigger fires:
+
+- The NUC backend receives the JSON command on TCP :9100
+- Both ``CameraWorker`` instances call ``TriggerSoftware::RunCommand()``
+- The Camera Simulator generates a synthetic frame for each camera
+- Each frame goes through Bayer → RGB8 debayer transform
+- A ``.ppm`` image file and a ``.json`` sidecar are written to ``~/frames/``
+- The backend logs to the NUC terminal:
 
 .. code-block:: text
 
-   "[Cam1] #1 11648x8742 geo no-fix 163ms"
-   "[Cam2] #1 14192x10640 geo no-fix 161ms"
+   [Cam1] #1 11648x8742 no-fix 163ms
+   [Cam2] #1 14192x10640 no-fix 161ms
 
-**Test 3 — Verify files written on NUC:**
+- The status stream in your second terminal updates ``written_gb``
+  immediately after the files are written. Note that ``frames``
+  may still show ``0`` — this is a known metrics wiring issue fixed
+  in the latest build. ``written_gb`` updating confirms the frames
+  were written:
+
+.. code-block:: text
+
+   "cam1":{...,"written_gb":0.305480448,...},"cam2":{...,"written_gb":0.45300864,...}
+
+**Test 3 — PPM and JSON files written to NUC**
+
+Verify the output files were created on the NUC:
 
 .. code-block:: bash
 
    ssh lvs@192.168.1.50 "ls -lh ~/frames/"
 
-Expected:
+Expected — one PPM and one JSON per camera per trigger:
 
 .. code-block:: text
 
-   -rw-rw-r-- 1 lvs lvs  435 cam1_frame_00001.json
+   -rw-rw-r-- 1 lvs lvs  435  cam1_frame_00001.json
    -rw-rw-r-- 1 lvs lvs  292M cam1_frame_00001.ppm
-   -rw-rw-r-- 1 lvs lvs  436 cam2_frame_00001.json
+   -rw-rw-r-- 1 lvs lvs  436  cam2_frame_00001.json
    -rw-rw-r-- 1 lvs lvs  433M cam2_frame_00001.ppm
 
-**Test 4 — Inspect the JSON sidecar:**
+The PPM files are full-resolution RGB8 images:
+
+- ``cam1``: 11648 × 8742 px = 291 MB uncompressed
+- ``cam2``: 14192 × 10640 px = 432 MB uncompressed
+
+**Test 4 — JSON sidecar structure is correct**
+
+Inspect the metadata sidecar for Camera 1:
 
 .. code-block:: bash
 
    ssh lvs@192.168.1.50 "cat ~/frames/cam1_frame_00001.json"
 
-Expected output:
+Expected output — all fields present, GNSS valid=false because no
+receiver is connected:
 
 .. code-block:: json
 
@@ -418,21 +450,34 @@ Expected output:
        }
    }
 
-**Test 5 — Status stream shows frame count incrementing:**
+Verify that ``frame_index``, ``capture_timestamp_utc``, ``image.width``,
+``image.height``, and ``gnss.valid`` are all present. The ``gnss``
+block will show ``"valid": false`` until a real GNSS receiver is
+connected — this is correct behaviour.
+
+**Test 5 — written_gb updates in status stream after trigger**
+
+With ``nc 192.168.1.50 9100`` still running in your second terminal,
+send another trigger and watch the status stream immediately after:
 
 .. code-block:: bash
 
-   nc 192.168.1.50 9100
+   echo '{"type":"trigger","target":"both"}' | nc 192.168.1.50 9100
 
-After triggering, the ``frames`` and ``written_gb`` fields should
-increment in the status stream:
+In the status stream terminal you will see ``written_gb`` grow with
+each trigger. After two triggers the values will be approximately:
 
 .. code-block:: text
 
-   "cam1":{"frames":1,"written_gb":0.305...}
-   "cam2":{"frames":1,"written_gb":0.453...}
+   "cam1":{..., "bw_gbs":0.0052, "written_gb":0.3054, ...}
+   "cam2":{..., "bw_gbs":0.0076, "written_gb":0.4530, ...}
+   "type":"status"}
 
-All four tests passing is **Stage 1 complete**.
+The ``bw_gbs`` values reflect the average write rate since the backend
+started — they are low because triggering manually is infrequent. At
+sustained acquisition rates both values will be much higher.
+
+All five tests passing is **Stage 1 complete**.
 
 ----
 
